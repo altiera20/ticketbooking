@@ -1,72 +1,154 @@
 import nodemailer from 'nodemailer';
-import { User } from '../models/User.model';
-import { generateEmailVerificationToken, generatePasswordResetToken } from '../utils/jwt.utils';
+import fs from 'fs';
+import path from 'path';
+import handlebars from 'handlebars';
+import config from '../config';
+import logger from '../utils/logger.utils';
+
+interface EmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+}
+
+interface TemplateData {
+  [key: string]: any;
+}
 
 class EmailService {
   private transporter: nodemailer.Transporter;
+  private defaultFrom: string;
+  private templatesDir: string;
 
   constructor() {
+    this.defaultFrom = `"${config.email.fromName}" <${config.email.fromEmail}>`;
+    this.templatesDir = path.join(__dirname, '../templates');
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
+      host: config.email.host,
+      port: config.email.port,
+      secure: config.email.secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: config.email.user,
+        pass: config.email.password,
       },
     });
+
+    // Verify connection
+    this.verifyConnection();
   }
 
-  async sendVerificationEmail(user: User): Promise<void> {
-    const token = generateEmailVerificationToken(user.id);
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@ticketbooking.com',
-      to: user.email,
-      subject: 'Verify Your Email',
-      html: `
-        <h1>Welcome to Universal Ticket Booking!</h1>
-        <p>Please click the link below to verify your email address:</p>
-        <a href="${verificationUrl}">Verify Email</a>
-        <p>This link will expire in 24 hours.</p>
-        <p>If you didn't create an account, please ignore this email.</p>
-      `,
-    });
+  private async verifyConnection(): Promise<void> {
+    try {
+      await this.transporter.verify();
+      logger.info('Email service connected successfully');
+    } catch (error) {
+      logger.error('Failed to connect to email service', error);
+    }
   }
 
-  async sendPasswordResetEmail(user: User): Promise<void> {
-    const token = generatePasswordResetToken(user.id);
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@ticketbooking.com',
-      to: user.email,
-      subject: 'Reset Your Password',
-      html: `
-        <h1>Password Reset Request</h1>
-        <p>You requested to reset your password. Click the link below to set a new password:</p>
-        <a href="${resetUrl}">Reset Password</a>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `,
-    });
+  private async renderTemplate(templateName: string, data: TemplateData): Promise<string> {
+    try {
+      const templatePath = path.join(this.templatesDir, `${templateName}.html`);
+      const templateContent = fs.readFileSync(templatePath, 'utf-8');
+      const template = handlebars.compile(templateContent);
+      return template(data);
+    } catch (error) {
+      logger.error(`Failed to render email template: ${templateName}`, error);
+      throw new Error(`Failed to render email template: ${templateName}`);
+    }
   }
 
-  async sendWelcomeEmail(user: User): Promise<void> {
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@ticketbooking.com',
-      to: user.email,
-      subject: 'Welcome to Universal Ticket Booking',
-      html: `
-        <h1>Welcome to Universal Ticket Booking!</h1>
-        <p>Dear ${user.firstName},</p>
-        <p>Thank you for joining Universal Ticket Booking. We're excited to have you on board!</p>
-        <p>You've received ${user.walletBalance} credits in your wallet to start booking tickets.</p>
-        <p>Explore our platform and find amazing events!</p>
-      `,
-    });
+  public async sendEmail(options: EmailOptions): Promise<boolean> {
+    try {
+      const mailOptions = {
+        from: options.from || this.defaultFrom,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      logger.info(`Email sent: ${info.messageId}`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to send email', error);
+      return false;
+    }
+  }
+
+  public async sendPasswordResetEmail(
+    to: string,
+    resetToken: string,
+    username: string
+  ): Promise<boolean> {
+    try {
+      const resetUrl = `${config.clientUrl}/reset-password?token=${resetToken}`;
+      const html = await this.renderTemplate('forgot-password', {
+        username,
+        resetUrl,
+        expiresIn: '1 hour',
+        year: new Date().getFullYear(),
+        appName: config.appName,
+      });
+
+      return await this.sendEmail({
+        to,
+        subject: 'Reset Your Password',
+        html,
+      });
+    } catch (error) {
+      logger.error('Failed to send password reset email', error);
+      return false;
+    }
+  }
+
+  public async sendPasswordResetSuccessEmail(
+    to: string,
+    username: string
+  ): Promise<boolean> {
+    try {
+      const html = await this.renderTemplate('password-reset-success', {
+        username,
+        loginUrl: `${config.clientUrl}/login`,
+        year: new Date().getFullYear(),
+        appName: config.appName,
+      });
+
+      return await this.sendEmail({
+        to,
+        subject: 'Password Reset Successful',
+        html,
+      });
+    } catch (error) {
+      logger.error('Failed to send password reset success email', error);
+      return false;
+    }
+  }
+
+  public async sendWelcomeEmail(
+    to: string,
+    username: string
+  ): Promise<boolean> {
+    try {
+      const html = await this.renderTemplate('welcome-email', {
+        username,
+        loginUrl: `${config.clientUrl}/login`,
+        year: new Date().getFullYear(),
+        appName: config.appName,
+      });
+
+      return await this.sendEmail({
+        to,
+        subject: `Welcome to ${config.appName}!`,
+        html,
+      });
+    } catch (error) {
+      logger.error('Failed to send welcome email', error);
+      return false;
+    }
   }
 }
 
-export const emailService = new EmailService();
+export default new EmailService();

@@ -6,6 +6,9 @@ import { Payment } from '../models/Payment.model';
 import { AppError } from '../middleware/error.middleware';
 import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
+import { upload } from '../services/upload.service';
+import userService from '../services/user.service';
+import logger from '../utils/logger.utils';
 
 export class UserController {
   private userRepository = AppDataSource.getRepository(User);
@@ -30,119 +33,163 @@ export class UserController {
     }),
   });
 
-  // Get user profile
-  public getProfile = async (req: Request, res: Response): Promise<Response> => {
+  /**
+   * Get user profile
+   * @route GET /api/users/profile
+   */
+  async getProfile(req: Request, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
+      
       if (!userId) {
-        throw new AppError(401, 'Unauthorized');
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
       }
-
-      const user = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['vendorProfile'],
-      });
-
+      
+      const user = await userService.getUserById(userId);
+      
       if (!user) {
-        throw new AppError(404, 'User not found');
+        res.status(404).json({ message: 'User not found' });
+        return;
       }
-
-      return res.json({
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          walletBalance: user.walletBalance,
-          isEmailVerified: user.isEmailVerified,
-          vendorProfile: user.vendorProfile,
-        },
-      });
+      
+      // Remove sensitive data
+      const { password, ...userProfile } = user;
+      
+      res.status(200).json({ user: userProfile });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({ message: error.message });
-      }
-      return res.status(500).json({ message: 'Internal server error' });
+      logger.error('Error getting user profile:', error);
+      res.status(500).json({ message: 'Failed to get user profile' });
     }
-  };
+  }
 
-  // Update user profile
-  public updateProfile = async (req: Request, res: Response): Promise<Response> => {
+  /**
+   * Update user profile
+   * @route PUT /api/users/profile
+   */
+  async updateProfile(req: Request, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
+      
       if (!userId) {
-        throw new AppError(401, 'Unauthorized');
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
       }
-
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user) {
-        throw new AppError(404, 'User not found');
-      }
-
+      
       const { firstName, lastName, phone } = req.body;
-
-      // Update basic info
-      if (firstName) user.firstName = firstName;
-      if (lastName) user.lastName = lastName;
-      if (phone) user.phone = phone;
-
-      await this.userRepository.save(user);
-
-      return res.json({
+      
+      const updatedUser = await userService.updateProfile(userId, {
+        firstName,
+        lastName,
+        phone,
+      });
+      
+      // Remove sensitive data
+      const { password, ...userProfile } = updatedUser;
+      
+      res.status(200).json({ 
         message: 'Profile updated successfully',
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          walletBalance: user.walletBalance,
-        },
+        user: userProfile
       });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({ message: error.message });
-      }
-      return res.status(500).json({ message: 'Internal server error' });
+      logger.error('Error updating user profile:', error);
+      res.status(500).json({ message: 'Failed to update profile' });
     }
-  };
+  }
 
-  // Change password
-  public changePassword = async (req: Request, res: Response): Promise<Response> => {
+  /**
+   * Upload profile picture
+   * @route POST /api/users/profile/picture
+   */
+  async uploadProfilePicture(req: Request, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
+      
       if (!userId) {
-        throw new AppError(401, 'Unauthorized');
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
       }
-
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user) {
-        throw new AppError(404, 'User not found');
+      
+      if (!req.file) {
+        res.status(400).json({ message: 'No file uploaded' });
+        return;
       }
-
-      const { currentPassword, newPassword } = req.body;
-
-      // Verify current password
-      const isPasswordValid = await user.comparePassword(currentPassword);
-      if (!isPasswordValid) {
-        throw new AppError(401, 'Current password is incorrect');
-      }
-
-      // Update password
-      user.password = newPassword;
-      await this.userRepository.save(user);
-
-      return res.json({ message: 'Password changed successfully' });
+      
+      const updatedUser = await userService.updateProfilePicture(userId, req.file.path);
+      
+      // Remove sensitive data
+      const { password, ...userProfile } = updatedUser;
+      
+      res.status(200).json({ 
+        message: 'Profile picture updated successfully',
+        user: userProfile
+      });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({ message: error.message });
-      }
-      return res.status(500).json({ message: 'Internal server error' });
+      logger.error('Error uploading profile picture:', error);
+      res.status(500).json({ message: 'Failed to upload profile picture' });
     }
-  };
+  }
+
+  /**
+   * Change password
+   * @route PUT /api/users/password
+   */
+  async changePassword(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+      
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        res.status(400).json({ message: 'Current password and new password are required' });
+        return;
+      }
+      
+      // Password validation
+      if (newPassword.length < 8) {
+        res.status(400).json({ message: 'New password must be at least 8 characters long' });
+        return;
+      }
+      
+      await userService.changePassword(userId, { currentPassword, newPassword });
+      
+      res.status(200).json({ message: 'Password changed successfully' });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Current password is incorrect') {
+        res.status(400).json({ message: error.message });
+      } else {
+        logger.error('Error changing password:', error);
+        res.status(500).json({ message: 'Failed to change password' });
+      }
+    }
+  }
+
+  /**
+   * Delete user account
+   * @route DELETE /api/users/account
+   */
+  async deleteAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+      
+      await userService.deleteAccount(userId);
+      
+      res.status(200).json({ message: 'Account deleted successfully' });
+    } catch (error) {
+      logger.error('Error deleting account:', error);
+      res.status(500).json({ message: 'Failed to delete account' });
+    }
+  }
 
   // Get user bookings with pagination
   public getUserBookings = async (req: Request, res: Response): Promise<Response> => {

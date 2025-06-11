@@ -13,6 +13,9 @@ import Home from './pages/Home';
 import Events from './pages/Events';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Profile from './pages/Profile';
 
 // Protected route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -61,6 +64,8 @@ const App: React.FC = () => {
             {/* Auth Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             {/* Main App Routes */}
             <Route
@@ -87,14 +92,7 @@ const App: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <div className="text-center py-12">
-                      <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                        User Profile
-                      </h1>
-                      <p className="text-gray-600 dark:text-gray-400">
-                        This is a protected route. You need to be logged in to view this page.
-                      </p>
-                    </div>
+                    <Profile />
                   </Layout>
                 </ProtectedRoute>
               }
