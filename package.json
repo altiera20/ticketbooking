@@ -1,0 +1,28 @@
+{
+    "name": "universal-ticket-booking",
+    "version": "1.0.0",
+    "description": "Universal Ticket Booking System",
+    "scripts": {
+        "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+        "dev:backend": "cd backend && npm run dev",
+        "dev:frontend": "cd frontend && npm run dev",
+        "build": "npm run build:backend && npm run build:frontend",
+        "build:backend": "cd backend && npm run build",
+        "build:frontend": "cd frontend && npm run build",
+        "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+        "docker:up": "docker-compose up -d",
+        "docker:down": "docker-compose down"
+    },
+    "devDependencies": {
+        "@types/jsonwebtoken": "^9.0.9",
+        "@types/nodemailer": "^6.4.17",
+        "concurrently": "^8.2.2"
+    },
+    "dependencies": {
+        "bcryptjs": "^3.0.2",
+        "express-rate-limit": "^7.5.0",
+        "jsonwebtoken": "^9.0.2",
+        "nodemailer": "^7.0.3",
+        "zod": "^3.25.57"
+    }
+}
