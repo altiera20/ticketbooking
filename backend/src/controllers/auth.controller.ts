@@ -4,7 +4,7 @@ import { User } from '../models/User.model';
 import { redis } from '../config/redis';
 import { UserRole } from '../types/common.types';
 import { AppError } from '../middleware/error.middleware';
-import { emailService } from '../services/email.service';
+import emailService from '../services/email.service';
 import { generateTokens, verifyToken } from '../utils/jwt.utils';
 
 export class AuthController {
@@ -38,14 +38,11 @@ export class AuthController {
       // Store refresh token in Redis
       await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60); // 7 days
 
-      // Send verification email
-      await emailService.sendVerificationEmail(user);
-      
-      // Send welcome email with wallet balance
-      await emailService.sendWelcomeEmail(user);
+      // Send welcome email
+      await emailService.sendWelcomeEmail(user.email, user.firstName);
 
       return res.status(201).json({
-        message: 'Registration successful. Please verify your email.',
+        message: 'Registration successful',
         accessToken,
         refreshToken,
         user: {
@@ -180,7 +177,11 @@ export class AuthController {
         return res.json({ message: 'If your email is registered, you will receive a password reset link' });
       }
 
-      await emailService.sendPasswordResetEmail(user);
+      // Generate password reset token
+      const resetToken = generateTokens(user).accessToken;
+
+      // Send password reset email
+      await emailService.sendPasswordResetEmail(user.email, resetToken, user.firstName);
 
       return res.json({ message: 'If your email is registered, you will receive a password reset link' });
     } catch (error) {

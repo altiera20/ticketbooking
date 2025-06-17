@@ -55,3 +55,102 @@ export interface Timestamps {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// backend/src/types/common.types.ts
+
+export enum BookingStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED'
+}
+
+export enum PaymentMethod {
+  CREDIT_CARD = 'CREDIT_CARD',
+  WALLET = 'WALLET'
+}
+
+export interface CreateBookingRequest {
+  eventId: string;
+  seatIds: string[];
+  paymentMethod: PaymentMethod;
+  paymentDetails?: {
+    cardNumber?: string;
+    expiryDate?: string;
+    cvv?: string;
+    cardHolderName?: string;
+  };
+}
+
+export interface BookingResponse {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: BookingStatus;
+  quantity: number;
+  totalAmount: number;
+  bookingDate: Date;
+  referenceNumber: string;
+  seats: SeatResponse[];
+  payment: PaymentResponse;
+  event: EventResponse;
+}
+
+export interface SeatResponse {
+  id: string;
+  seatNumber: string;
+  row: string;
+  section: string;
+  price: number;
+  isBooked: boolean;
+}
+
+export interface PaymentResponse {
+  id: string;
+  amount: number;
+  status: PaymentStatus;
+  method: PaymentMethod;
+  transactionId?: string;
+}
+
+export interface EventResponse {
+  id: string;
+  title: string;
+  description: string;
+  date: Date;
+  venue: string;
+  category: string;
+  price: number;
+  totalSeats: number;
+  availableSeats: number;
+}
+
+export interface SeatReservationRequest {
+  eventId: string;
+  seatIds: string[];
+}
+
+export interface ProcessPaymentRequest {
+  bookingId: string;
+  paymentMethod: PaymentMethod;
+  paymentDetails?: {
+    cardNumber?: string;
+    expiryDate?: string;
+    cvv?: string;
+    cardHolderName?: string;
+  };
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}

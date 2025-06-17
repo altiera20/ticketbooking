@@ -73,26 +73,6 @@ export class CreateInitialTables1710141000000 implements MigrationInterface {
       CREATE INDEX "idx_events_event_date" ON "events"("eventDate");
     `);
 
-    // Create seats table
-    await queryRunner.query(`
-      CREATE TABLE "seats" (
-        "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-        "eventId" uuid NOT NULL,
-        "seatNumber" varchar(10) NOT NULL,
-        "row" varchar(10) NOT NULL,
-        "section" varchar(50) NOT NULL,
-        "status" varchar(20) NOT NULL DEFAULT 'available',
-        "bookingId" uuid,
-        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
-        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
-        CONSTRAINT "fk_seats_event" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE CASCADE,
-        CONSTRAINT "fk_seats_booking" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE SET NULL
-      );
-
-      CREATE INDEX "idx_seats_event_status" ON "seats"("eventId", "status");
-      CREATE UNIQUE INDEX "idx_seats_event_number" ON "seats"("eventId", "seatNumber");
-    `);
-
     // Create bookings table
     await queryRunner.query(`
       CREATE TABLE "bookings" (
@@ -112,6 +92,26 @@ export class CreateInitialTables1710141000000 implements MigrationInterface {
       CREATE INDEX "idx_bookings_user" ON "bookings"("userId");
       CREATE INDEX "idx_bookings_event" ON "bookings"("eventId");
       CREATE INDEX "idx_bookings_status" ON "bookings"("status");
+    `);
+
+    // Create seats table
+    await queryRunner.query(`
+      CREATE TABLE "seats" (
+        "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        "eventId" uuid NOT NULL,
+        "seatNumber" varchar(10) NOT NULL,
+        "row" varchar(10) NOT NULL,
+        "section" varchar(50) NOT NULL,
+        "status" varchar(20) NOT NULL DEFAULT 'available',
+        "bookingId" uuid,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "fk_seats_event" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE CASCADE,
+        CONSTRAINT "fk_seats_booking" FOREIGN KEY ("bookingId") REFERENCES "bookings"("id") ON DELETE SET NULL
+      );
+
+      CREATE INDEX "idx_seats_event_status" ON "seats"("eventId", "status");
+      CREATE UNIQUE INDEX "idx_seats_event_number" ON "seats"("eventId", "seatNumber");
     `);
 
     // Create payments table
@@ -137,8 +137,8 @@ export class CreateInitialTables1710141000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop tables in reverse order
     await queryRunner.query(`DROP TABLE IF EXISTS "payments" CASCADE;`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "bookings" CASCADE;`);
     await queryRunner.query(`DROP TABLE IF EXISTS "seats" CASCADE;`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "bookings" CASCADE;`);
     await queryRunner.query(`DROP TABLE IF EXISTS "events" CASCADE;`);
     await queryRunner.query(`DROP TABLE IF EXISTS "vendors" CASCADE;`);
     await queryRunner.query(`DROP TABLE IF EXISTS "users" CASCADE;`);

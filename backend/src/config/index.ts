@@ -3,7 +3,48 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-const config = {
+interface JWTConfig {
+  secret: string;
+  accessExpiresIn: string;
+  refreshExpiresIn: string;
+}
+
+interface DBConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+}
+
+interface EmailConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  fromEmail: string;
+  fromName: string;
+}
+
+interface RateLimitConfig {
+  windowMs: number;
+  max: number;
+}
+
+export interface AppConfig {
+  port: number | string;
+  nodeEnv: string;
+  jwt: JWTConfig;
+  db: DBConfig;
+  email: EmailConfig;
+  clientUrl: string;
+  appName: string;
+  passwordResetExpiry: number;
+  rateLimit: RateLimitConfig;
+}
+
+const config: AppConfig = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   

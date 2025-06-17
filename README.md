@@ -11,6 +11,27 @@ A comprehensive ticket booking platform for movies, concerts, and train journeys
 - **Vendor Dashboard**: Vendors can manage their events and track bookings
 - **Accessible UI**: Built with accessibility in mind, following WCAG guidelines
 - **State Management**: Centralized state management with Redux Toolkit and RTK Query
+- **Seat Selection and Booking**: Users can select seats and book events
+- **Payment Processing**: Integrated with Stripe for credit card payments and a wallet system
+- **Booking Management**: Users can manage their bookings
+- **User Profile Management**: Users can manage their profile information
+- **Admin Dashboard**: Admin can manage users, events, and bookings
+
+## Payment System
+
+The application supports two payment methods:
+
+1. **Credit Card Payments**: Integrated with Stripe for secure, PCI-compliant payment processing
+2. **Wallet Payments**: Users can pre-fund their wallet and use it for quick bookings
+
+### Wallet Features
+
+- View current balance
+- Top up wallet using credit card
+- View transaction history
+- Automatic refunds to wallet for cancelled bookings
+
+For detailed documentation on the payment implementation, see [Payment Implementation Documentation](./docs/payment-implementation.md).
 
 ## Tech Stack
 

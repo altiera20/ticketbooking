@@ -17,7 +17,9 @@ interface ChangePasswordData {
 }
 
 class UserService {
-  private userRepository = getRepository(User);
+  private get userRepository() {
+    return getRepository(User);
+  }
 
   /**
    * Get user by ID

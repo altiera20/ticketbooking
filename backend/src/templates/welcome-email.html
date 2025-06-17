@@ -6,141 +6,59 @@
   <title>Welcome to {{appName}}</title>
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: Arial, sans-serif;
       line-height: 1.6;
       color: #333;
-      margin: 0;
-      padding: 0;
-      background-color: #f9f9f9;
-    }
-    .container {
       max-width: 600px;
       margin: 0 auto;
       padding: 20px;
-      background-color: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     }
     .header {
-      text-align: center;
-      padding: 20px 0;
-      border-bottom: 1px solid #eaeaea;
-    }
-    .logo {
-      max-width: 150px;
-      height: auto;
-    }
-    .content {
-      padding: 30px 20px;
-    }
-    .welcome-banner {
-      background-color: #0ea5e9;
+      background-color: #4a90e2;
       color: white;
       padding: 20px;
       text-align: center;
-      border-radius: 6px;
-      margin-bottom: 30px;
+      border-radius: 5px 5px 0 0;
     }
-    .features {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      margin: 30px 0;
-    }
-    .feature {
-      flex-basis: 30%;
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    .feature-icon {
-      font-size: 24px;
-      margin-bottom: 10px;
-      color: #0ea5e9;
+    .content {
+      padding: 20px;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 0 0 5px 5px;
     }
     .button {
       display: inline-block;
-      background-color: #0ea5e9;
+      padding: 10px 20px;
+      background-color: #4a90e2;
       color: white;
       text-decoration: none;
-      padding: 12px 30px;
-      border-radius: 4px;
+      border-radius: 5px;
       margin: 20px 0;
-      font-weight: bold;
     }
     .footer {
       text-align: center;
-      padding: 20px;
+      margin-top: 20px;
       font-size: 12px;
       color: #666;
-      border-top: 1px solid #eaeaea;
-    }
-    .social {
-      margin-top: 15px;
-    }
-    .social a {
-      display: inline-block;
-      margin: 0 10px;
-      color: #0ea5e9;
-      text-decoration: none;
-    }
-    @media only screen and (max-width: 600px) {
-      .container {
-        width: 100%;
-        border-radius: 0;
-      }
-      .feature {
-        flex-basis: 100%;
-      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1 style="color: #0ea5e9;">{{appName}}</h1>
-    </div>
-    <div class="content">
-      <div class="welcome-banner">
-        <h2>Welcome to {{appName}}!</h2>
-        <p>We're thrilled to have you join us.</p>
-      </div>
-      
-      <p>Hello {{username}},</p>
-      <p>Thank you for creating an account with us. We're excited to help you discover and book tickets for your favorite events!</p>
-      
-      <div class="features">
-        <div class="feature">
-          <div class="feature-icon">🎬</div>
-          <h3>Movies</h3>
-          <p>Book tickets for the latest blockbusters</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">🎵</div>
-          <h3>Concerts</h3>
-          <p>Never miss your favorite artists</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">🚆</div>
-          <h3>Train Journeys</h3>
-          <p>Travel with ease and comfort</p>
-        </div>
-      </div>
-      
-      <p>Get started by exploring our wide range of events:</p>
-      <div style="text-align: center;">
-        <a href="{{loginUrl}}" class="button">Start Exploring</a>
-      </div>
-      
-      <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
-      <p>Best regards,<br>The {{appName}} Team</p>
-    </div>
-    <div class="footer">
-      <p>&copy; {{year}} {{appName}}. All rights reserved.</p>
-      <div class="social">
-        <a href="#">Facebook</a> | <a href="#">Twitter</a> | <a href="#">Instagram</a>
-      </div>
-      <p>This is an automated email, please do not reply.</p>
-    </div>
+  <div class="header">
+    <h1>Welcome to {{appName}}!</h1>
+  </div>
+  <div class="content">
+    <p>Hello {{username}},</p>
+    <p>Thank you for joining {{appName}}! We're excited to have you on board.</p>
+    <p>You can now start exploring and booking tickets for your favorite events.</p>
+    <p>
+      <a href="{{loginUrl}}" class="button">Get Started</a>
+    </p>
+    <p>If you have any questions or need assistance, feel free to contact our support team.</p>
+    <p>Best regards,<br>The {{appName}} Team</p>
+  </div>
+  <div class="footer">
+    <p>&copy; {{year}} {{appName}}. All rights reserved.</p>
   </div>
 </body>
 </html>

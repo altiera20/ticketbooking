@@ -9,6 +9,7 @@ export const EventList: React.FC<EventListProps> = ({
   error,
   viewType = 'grid',
   onEventClick,
+  onRetry,
 }) => {
   // Handle event click
   const handleEventClick = (event: Event) => {
@@ -37,7 +38,7 @@ export const EventList: React.FC<EventListProps> = ({
         </div>
         <button
           className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md transition-colors"
-          onClick={() => window.location.reload()}
+          onClick={onRetry || (() => window.location.reload())}
         >
           Try Again
         </button>

@@ -10,6 +10,11 @@ interface EmailOptions {
   subject: string;
   html: string;
   from?: string;
+  attachments?: {
+    filename: string;
+    content: Buffer;
+    contentType: string;
+  }[];
 }
 
 interface TemplateData {
@@ -67,6 +72,7 @@ class EmailService {
         to: options.to,
         subject: options.subject,
         html: options.html,
+        attachments: options.attachments,
       };
 
       const info = await this.transporter.sendMail(mailOptions);
@@ -146,6 +152,91 @@ class EmailService {
       });
     } catch (error) {
       logger.error('Failed to send welcome email', error);
+      return false;
+    }
+  }
+
+  public async sendBookingConfirmation(
+    to: string,
+    username: string,
+    referenceNumber: string,
+    eventTitle: string,
+    eventDate: Date,
+    ticketPdf: Buffer
+  ): Promise<boolean> {
+    try {
+      const formattedDate = new Date(eventDate).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      const html = await this.renderTemplate('booking-confirmation', {
+        username,
+        referenceNumber,
+        eventTitle,
+        eventDate: formattedDate,
+        profileUrl: `${config.clientUrl}/profile`,
+        year: new Date().getFullYear(),
+        appName: config.appName,
+      });
+
+      return await this.sendEmail({
+        to,
+        subject: `Booking Confirmation - ${referenceNumber}`,
+        html,
+        attachments: [
+          {
+            filename: `ticket-${referenceNumber}.pdf`,
+            content: ticketPdf,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+    } catch (error) {
+      logger.error('Failed to send booking confirmation email', error);
+      return false;
+    }
+  }
+
+  public async sendBookingCancellation(
+    to: string,
+    username: string,
+    referenceNumber: string,
+    eventTitle: string,
+    eventDate: Date
+  ): Promise<boolean> {
+    try {
+      const formattedDate = new Date(eventDate).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      const html = await this.renderTemplate('booking-cancellation', {
+        username,
+        referenceNumber,
+        eventTitle,
+        eventDate: formattedDate,
+        profileUrl: `${config.clientUrl}/profile`,
+        eventsUrl: `${config.clientUrl}/events`,
+        year: new Date().getFullYear(),
+        appName: config.appName,
+      });
+
+      return await this.sendEmail({
+        to,
+        subject: `Booking Cancellation - ${referenceNumber}`,
+        html,
+      });
+    } catch (error) {
+      logger.error('Failed to send booking cancellation email', error);
       return false;
     }
   }

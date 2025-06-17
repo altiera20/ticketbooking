@@ -1,7 +1,5 @@
 import Redis from 'ioredis';
-import { config } from 'dotenv';
-
-config();
+import config from './index';
 
 export const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
@@ -10,10 +8,16 @@ export const redis = new Redis({
   maxRetriesPerRequest: 3,
 });
 
-redis.on('error', (error) => {
-  console.error('Redis connection error:', error);
-});
+export const connectRedis = async (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    redis.on('error', (error) => {
+      console.error('Redis connection error:', error);
+      reject(error);
+    });
 
-redis.on('connect', () => {
-  console.log('Connected to Redis');
-});
+    redis.on('connect', () => {
+      console.log('Connected to Redis');
+      resolve();
+    });
+  });
+};

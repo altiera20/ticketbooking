@@ -17,7 +17,11 @@
       "baseUrl": ".",
       "paths": {
         "@/*": ["src/*"]
-      }
+      },
+      "typeRoots": ["./node_modules/@types"],
+      "resolveJsonModule": true,
+      "allowJs": true,
+      "declaration": true
     },
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist", "tests"]

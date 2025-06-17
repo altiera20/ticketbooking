@@ -111,6 +111,8 @@ export interface EventFilters {
   search?: string;
   sortBy?: 'price' | 'date' | 'title';
   sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
 }
 
 // Component Props
@@ -173,6 +175,7 @@ export interface EventListProps {
   error?: string;
   viewType?: 'grid' | 'list';
   onEventClick?: (event: Event) => void;
+  onRetry?: () => void;
 }
 
 export interface EventFiltersProps {

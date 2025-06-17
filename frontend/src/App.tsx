@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import { RootState } from './store';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Layouts
 import Layout from './components/common/Layout';
@@ -11,6 +12,8 @@ import Layout from './components/common/Layout';
 // Pages
 import Home from './pages/Home';
 import Events from './pages/Events';
+import EventDetail from './pages/EventDetail';
+import Booking from './pages/Booking';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -19,7 +22,7 @@ import Profile from './pages/Profile';
 
 // Protected route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useAuth();
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -35,6 +38,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <AuthProvider>
         <div className={mode === 'dark' ? 'dark' : ''}>
           <Toaster
             position="top-right"
@@ -85,8 +89,28 @@ const App: React.FC = () => {
                 </Layout>
               }
             />
+              
+              <Route
+                path="/events/:id"
+                element={
+                  <Layout>
+                    <EventDetail />
+                  </Layout>
+                }
+              />
             
             {/* Protected Routes */}
+              <Route
+                path="/booking"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Booking />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              
             <Route
               path="/profile"
               element={
@@ -122,6 +146,7 @@ const App: React.FC = () => {
             />
           </Routes>
         </div>
+        </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );
