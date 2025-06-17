@@ -6,15 +6,9 @@ import { authenticate } from '../middleware/auth.middleware';
 const router = Router();
 const paymentController = new PaymentController();
 
-// All payment routes require authentication
+// All payment routes require authentication except webhook
+router.use('/webhook', paymentController.webhookHandler);
 router.use(authenticate);
-
-// Process a payment
-router.post(
-  '/charge',
-  validate(paymentController.chargePaymentSchema),
-  paymentController.chargePayment
-);
 
 // Top up wallet
 router.post(
@@ -23,11 +17,29 @@ router.post(
   paymentController.topUpWallet
 );
 
-// Get wallet transactions
+// Get wallet balance
+router.get(
+  '/wallet/balance',
+  paymentController.getWalletBalance
+);
+
+// Get transaction history
 router.get(
   '/wallet/transactions',
-  validate(paymentController.getWalletTransactionsSchema),
-  paymentController.getWalletTransactions
+  paymentController.getTransactionHistory
+);
+
+// Create payment order
+router.post(
+  '/order',
+  paymentController.createPaymentOrder
+);
+
+// Verify payment
+router.post(
+  '/verify',
+  validate(paymentController.verifyPaymentSchema),
+  paymentController.verifyPayment
 );
 
 export default router; 

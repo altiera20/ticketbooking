@@ -14,14 +14,15 @@ export enum BookingStatus {
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
   CANCELLED = 'cancelled',
-  COMPLETED = 'completed',
+  EXPIRED = 'expired',
+  COMPLETED = 'completed'
 }
 
 export enum PaymentStatus {
   PENDING = 'pending',
   COMPLETED = 'completed',
   FAILED = 'failed',
-  REFUNDED = 'refunded',
+  REFUNDED = 'refunded'
 }
 
 export enum SeatStatus {
@@ -54,22 +55,6 @@ export interface BaseEntity {
 export interface Timestamps {
   createdAt: Date;
   updatedAt: Date;
-}
-
-// backend/src/types/common.types.ts
-
-export enum BookingStatus {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
-  CANCELLED = 'CANCELLED',
-  EXPIRED = 'EXPIRED'
-}
-
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  REFUNDED = 'REFUNDED'
 }
 
 export enum PaymentMethod {
@@ -145,6 +130,11 @@ export interface ProcessPaymentRequest {
     expiryDate?: string;
     cvv?: string;
     cardHolderName?: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
+    transactionId?: string;
+    orderId?: string;
   };
 }
 

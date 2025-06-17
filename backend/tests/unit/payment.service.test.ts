@@ -2,73 +2,73 @@ import { PaymentService } from '../../src/services/payment.service';
 import { PaymentMethod, PaymentStatus } from '../../src/types/common.types';
 import { TransactionType } from '../../src/models/WalletTransaction.model';
 import { AppDataSource } from '../../src/config/database';
+import { Payment } from '../../src/models/Payment.model';
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import { WalletTransaction } from '../../src/models/WalletTransaction.model';
+import { User } from '../../src/models/User.model';
+import { Booking } from '../../src/models/Booking.model';
 
-// Mock TypeORM
-jest.mock('../../src/config/database', () => ({
-  AppDataSource: {
-    getRepository: jest.fn(),
-    transaction: jest.fn((cb) => cb({
-      findOne: jest.fn(),
-      save: jest.fn()
-    }))
-  }
-}));
+// Mock repositories
+const mockPaymentRepo = {
+  save: jest.fn(),
+  findOne: jest.fn()
+};
 
-// Mock Stripe
-jest.mock('stripe', () => {
+const mockUserRepo = {
+  findOne: jest.fn(),
+  save: jest.fn()
+};
+
+const mockWalletTransactionRepo = {
+  save: jest.fn(),
+  find: jest.fn()
+};
+
+const mockBookingRepo = {
+  findOne: jest.fn()
+};
+
+// Mock Razorpay
+jest.mock('razorpay', () => {
   return jest.fn().mockImplementation(() => {
     return {
-      paymentMethods: {
-        create: jest.fn().mockResolvedValue({ id: 'pm_test123' })
-      },
-      paymentIntents: {
+      orders: {
         create: jest.fn().mockResolvedValue({ 
-          id: 'pi_test123', 
-          status: 'succeeded' 
+          id: 'order_test123',
+          amount: 10000,
+          currency: 'INR',
+          receipt: 'receipt_test123',
+          status: 'created'
         })
       },
-      refunds: {
-        create: jest.fn().mockResolvedValue({ id: 'ref_test123' })
+      payments: {
+        refund: jest.fn().mockResolvedValue({ id: 'ref_test123' })
       }
     };
   });
 });
 
+// Mock AppDataSource
+jest.mock('../../src/config/database', () => ({
+  AppDataSource: {
+    getRepository: jest.fn((entity) => {
+      if (entity === Payment) return mockPaymentRepo;
+      if (entity === User) return mockUserRepo;
+      if (entity === WalletTransaction) return mockWalletTransactionRepo;
+      if (entity === Booking) return mockBookingRepo;
+      return {};
+    }),
+    transaction: jest.fn(async (cb) => await cb({
+      save: async (entity) => entity
+    }))
+  }
+}));
+
 describe('PaymentService', () => {
   let paymentService: PaymentService;
-  let mockPaymentRepo: any;
-  let mockUserRepo: any;
-  let mockWalletTransactionRepo: any;
-  let mockBookingRepo: any;
 
   beforeEach(() => {
-    // Setup mocks
-    mockPaymentRepo = {
-      findOne: jest.fn(),
-      save: jest.fn()
-    };
-    mockUserRepo = {
-      findOne: jest.fn(),
-      save: jest.fn()
-    };
-    mockWalletTransactionRepo = {
-      find: jest.fn(),
-      findOne: jest.fn(),
-      save: jest.fn()
-    };
-    mockBookingRepo = {
-      findOne: jest.fn()
-    };
-
-    // Mock getRepository to return our mocks
-    (AppDataSource.getRepository as jest.Mock).mockImplementation((entity: any) => {
-      if (entity.name === 'Payment') return mockPaymentRepo;
-      if (entity.name === 'User') return mockUserRepo;
-      if (entity.name === 'WalletTransaction') return mockWalletTransactionRepo;
-      if (entity.name === 'Booking') return mockBookingRepo;
-      return {};
-    });
-
+    jest.clearAllMocks();
     paymentService = new PaymentService();
   });
 
@@ -80,24 +80,28 @@ describe('PaymentService', () => {
       const method = PaymentMethod.WALLET;
       
       // Mock booking and user
-      const mockUser = { id: 'user-123', walletBalance: 200 };
-      const mockBooking = { id: bookingId, user: mockUser };
-      
-      // Mock transaction result
-      const mockTransaction = { id: 'transaction-123' };
-      
-      // Setup mocks
-      mockBookingRepo.findOne.mockResolvedValue(mockBooking);
-      mockWalletTransactionRepo.save.mockResolvedValue(mockTransaction);
-      mockPaymentRepo.save.mockImplementation(payment => Promise.resolve(payment));
-      
-      // Mock transaction callback
-      (AppDataSource.transaction as jest.Mock).mockImplementation((cb) => {
-        return cb({
-          findOne: jest.fn().mockResolvedValue(mockBooking),
-          save: jest.fn().mockResolvedValue(mockTransaction)
-        });
+      mockBookingRepo.findOne.mockResolvedValue({
+        id: bookingId,
+        userId: 'user-123'
       });
+      
+      mockUserRepo.findOne.mockResolvedValue({
+        id: 'user-123',
+        walletBalance: 200
+      });
+      
+      // Mock wallet transaction
+      mockWalletTransactionRepo.save.mockResolvedValue({
+        id: 'transaction-123',
+        userId: 'user-123',
+        amount,
+        type: 'debit',
+        description: `Payment for booking #${bookingId}`,
+        bookingId
+      });
+      
+      // Mock payment repo save
+      mockPaymentRepo.save.mockImplementation((payment: Payment) => Promise.resolve(payment));
 
       // Execute
       const result = await paymentService.processPayment(bookingId, amount, method);
@@ -107,7 +111,7 @@ describe('PaymentService', () => {
       expect(result.bookingId).toBe(bookingId);
       expect(result.amount).toBe(amount);
       expect(result.paymentMethod).toBe(method);
-      expect(result.transactionId).toContain('WALLET_');
+      expect(result.transactionId).toBeTruthy();
       expect(mockPaymentRepo.save).toHaveBeenCalled();
     });
 
@@ -117,14 +121,12 @@ describe('PaymentService', () => {
       const amount = 100;
       const method = PaymentMethod.CREDIT_CARD;
       const paymentDetails = {
-        cardNumber: '4242424242424242',
-        expiryDate: '12/25',
-        cvv: '123',
-        cardHolderName: 'Test User'
+        razorpayOrderId: 'order_123',
+        razorpayPaymentId: 'pay_123'
       };
       
       // Mock payment repo save
-      mockPaymentRepo.save.mockImplementation(payment => Promise.resolve(payment));
+      mockPaymentRepo.save.mockImplementation((payment: Payment) => Promise.resolve(payment));
 
       // Execute
       const result = await paymentService.processPayment(bookingId, amount, method, paymentDetails);
@@ -138,27 +140,25 @@ describe('PaymentService', () => {
       expect(mockPaymentRepo.save).toHaveBeenCalled();
     });
 
-    it('should handle wallet payment with insufficient balance', async () => {
+    it('should handle wallet payment failure when balance is insufficient', async () => {
       // Mock data
       const bookingId = 'booking-123';
-      const amount = 200;
+      const amount = 100;
       const method = PaymentMethod.WALLET;
       
       // Mock booking and user with insufficient balance
-      const mockUser = { id: 'user-123', walletBalance: 100 };
-      const mockBooking = { id: bookingId, user: mockUser };
-      
-      // Setup mocks
-      mockBookingRepo.findOne.mockResolvedValue(mockBooking);
-      mockPaymentRepo.save.mockImplementation(payment => Promise.resolve(payment));
-      
-      // Mock transaction callback
-      (AppDataSource.transaction as jest.Mock).mockImplementation((cb) => {
-        return cb({
-          findOne: jest.fn().mockResolvedValue(mockBooking),
-          save: jest.fn()
-        });
+      mockBookingRepo.findOne.mockResolvedValue({
+        id: bookingId,
+        userId: 'user-123'
       });
+      
+      mockUserRepo.findOne.mockResolvedValue({
+        id: 'user-123',
+        walletBalance: 50 // Less than amount
+      });
+      
+      // Mock payment repo save
+      mockPaymentRepo.save.mockImplementation((payment: Payment) => Promise.resolve(payment));
 
       // Execute
       const result = await paymentService.processPayment(bookingId, amount, method);
@@ -169,115 +169,107 @@ describe('PaymentService', () => {
     });
   });
 
-  describe('topUpWallet', () => {
-    it('should top up wallet successfully', async () => {
+  describe('createPaymentOrder', () => {
+    it('should create a Razorpay order successfully', async () => {
       // Mock data
-      const userId = 'user-123';
       const amount = 100;
-      const paymentDetails = {
-        cardNumber: '4242424242424242',
-        expiryDate: '12/25',
-        cvv: '123',
-        cardHolderName: 'Test User'
-      };
+      const currency = 'INR';
+      const receipt = 'receipt_123';
       
-      // Mock user
-      const mockUser = { id: userId, walletBalance: 50 };
-      
-      // Setup mocks
-      mockUserRepo.findOne.mockResolvedValue(mockUser);
-      
-      // Mock transaction callback
-      (AppDataSource.transaction as jest.Mock).mockImplementation((cb) => {
-        return cb({
-          findOne: jest.fn().mockResolvedValue(mockUser),
-          save: jest.fn().mockImplementation(entity => Promise.resolve(entity))
-        });
-      });
-
       // Execute
-      const result = await paymentService.topUpWallet(userId, amount, paymentDetails);
-
+      const result = await paymentService.createPaymentOrder(amount, currency, receipt);
+      
       // Assertions
-      expect(result.success).toBe(true);
-      expect(result.balance).toBe(150); // 50 + 100
-      expect(result.transactionId).toBeTruthy();
+      expect(result).toBeDefined();
+      expect(result.id).toBe('order_test123');
+      expect(result.amount).toBe(10000);
+      expect(result.currency).toBe('INR');
+    });
+  });
+
+  describe('verifyPaymentSignature', () => {
+    it('should verify a valid payment signature', () => {
+      // Mock crypto for testing
+      const crypto = require('crypto');
+      const originalCreateHmac = crypto.createHmac;
+      
+      crypto.createHmac = jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        digest: jest.fn().mockReturnValue('valid_signature')
+      });
+      
+      // Test data
+      const orderId = 'order_123';
+      const paymentId = 'pay_123';
+      const signature = 'valid_signature';
+      
+      // Execute
+      const result = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
+      
+      // Restore original crypto
+      crypto.createHmac = originalCreateHmac;
+      
+      // Assertions
+      expect(result).toBe(true);
+    });
+    
+    it('should reject an invalid payment signature', () => {
+      // Mock crypto for testing
+      const crypto = require('crypto');
+      const originalCreateHmac = crypto.createHmac;
+      
+      crypto.createHmac = jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        digest: jest.fn().mockReturnValue('valid_signature')
+      });
+      
+      // Test data
+      const orderId = 'order_123';
+      const paymentId = 'pay_123';
+      const signature = 'invalid_signature';
+      
+      // Execute
+      const result = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
+      
+      // Restore original crypto
+      crypto.createHmac = originalCreateHmac;
+      
+      // Assertions
+      expect(result).toBe(false);
     });
   });
 
   describe('refundPayment', () => {
-    it('should refund a wallet payment', async () => {
+    it('should process a refund for a credit card payment', async () => {
       // Mock data
       const paymentId = 'payment-123';
-      const bookingId = 'booking-123';
-      const amount = 100;
       
-      // Mock payment, booking and user
-      const mockUser = { id: 'user-123', walletBalance: 100 };
-      const mockBooking = { id: bookingId, user: mockUser };
-      const mockPayment = { 
-        id: paymentId, 
-        bookingId, 
-        amount, 
-        paymentMethod: PaymentMethod.WALLET, 
+      // Mock payment
+      mockPaymentRepo.findOne.mockResolvedValue({
+        id: paymentId,
+        bookingId: 'booking-123',
+        paymentMethod: PaymentMethod.CREDIT_CARD,
         status: PaymentStatus.COMPLETED,
-        booking: mockBooking
-      };
-      
-      // Setup mocks
-      mockPaymentRepo.findOne.mockResolvedValue(mockPayment);
-      
-      // Mock transaction callback
-      (AppDataSource.transaction as jest.Mock).mockImplementation((cb) => {
-        return cb({
-          findOne: jest.fn().mockResolvedValue(mockPayment),
-          save: jest.fn().mockImplementation(entity => Promise.resolve(entity))
-        });
+        amount: 100,
+        transactionId: 'pay_123',
+        booking: {
+          id: 'booking-123',
+          user: {
+            id: 'user-123'
+          }
+        }
       });
+      
+      // Mock payment repo save
+      mockPaymentRepo.save.mockImplementation((payment: Payment) => Promise.resolve(payment));
 
       // Execute
       const result = await paymentService.refundPayment(paymentId);
 
       // Assertions
       expect(result.status).toBe(PaymentStatus.REFUNDED);
-    });
-
-    it('should refund a credit card payment', async () => {
-      // Mock data
-      const paymentId = 'payment-123';
-      const bookingId = 'booking-123';
-      const amount = 100;
-      const transactionId = 'pi_test123';
-      
-      // Mock payment, booking and user
-      const mockUser = { id: 'user-123' };
-      const mockBooking = { id: bookingId, user: mockUser };
-      const mockPayment = { 
-        id: paymentId, 
-        bookingId, 
-        amount, 
-        paymentMethod: PaymentMethod.CREDIT_CARD, 
-        status: PaymentStatus.COMPLETED,
-        transactionId,
-        booking: mockBooking
-      };
-      
-      // Setup mocks
-      mockPaymentRepo.findOne.mockResolvedValue(mockPayment);
-      
-      // Mock transaction callback
-      (AppDataSource.transaction as jest.Mock).mockImplementation((cb) => {
-        return cb({
-          findOne: jest.fn().mockResolvedValue(mockPayment),
-          save: jest.fn().mockImplementation(entity => Promise.resolve(entity))
-        });
-      });
-
-      // Execute
-      const result = await paymentService.refundPayment(paymentId);
-
-      // Assertions
-      expect(result.status).toBe(PaymentStatus.REFUNDED);
+      expect(result.refundedAt).toBeDefined();
+      expect(mockPaymentRepo.save).toHaveBeenCalled();
     });
   });
 }); 

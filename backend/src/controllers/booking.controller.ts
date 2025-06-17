@@ -8,20 +8,21 @@ import { Seat } from '../models/Seat.model';
 import { Event } from '../models/Event.model';
 import { User } from '../models/User.model';
 import { PaymentService } from '../services/payment.service';
-import { EmailService } from '../services/email.service';
+import emailService from '../services/email.service';
 import { 
   BookingStatus, 
   CreateBookingRequest, 
   ProcessPaymentRequest,
   ApiResponse,
-  BookingResponse 
+  BookingResponse,
+  PaymentMethod
 } from '../types/common.types';
 import { AppError } from '../middleware/error.middleware';
 import { z } from 'zod';
 import { redis } from '../config/redis';
 import { v4 as uuidv4 } from 'uuid';
 import { generatePDF } from '../utils/pdf.utils';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 
 export class BookingController {
   private bookingRepository: Repository<Booking>;
@@ -29,10 +30,8 @@ export class BookingController {
   private eventRepository: Repository<Event>;
   private userRepository: Repository<User>;
   private paymentService: PaymentService;
-  private emailService: EmailService;
-
-  // Temporary seat reservations (in production, use Redis)
-  private seatReservations = new Map<string, { userId: string; expiresAt: Date }>();
+  private seatReservations: Map<string, { userId: string; expiresAt: number }>;
+  private reservationTimeout: number = 10 * 60 * 1000; // 10 minutes in milliseconds
 
   constructor() {
     this.bookingRepository = AppDataSource.getRepository(Booking);
@@ -40,12 +39,7 @@ export class BookingController {
     this.eventRepository = AppDataSource.getRepository(Event);
     this.userRepository = AppDataSource.getRepository(User);
     this.paymentService = new PaymentService();
-    this.emailService = new EmailService();
-
-    // Clean up expired reservations every minute
-    setInterval(() => {
-      this.cleanupExpiredReservations();
-    }, 60000);
+    this.seatReservations = new Map();
   }
 
   // Validation schemas
@@ -59,21 +53,23 @@ export class BookingController {
         expiryDate: z.string().optional(),
         cvv: z.string().optional(),
         cardHolderName: z.string().optional(),
+        razorpayOrderId: z.string().optional(),
+        razorpayPaymentId: z.string().optional(),
+        razorpaySignature: z.string().optional(),
       }).optional(),
     }).refine(
       data => {
-        // If payment method is credit card, payment details are required
+        // If payment method is credit card, Razorpay details are required
         if (data.paymentMethod === PaymentMethod.CREDIT_CARD) {
           return data.paymentDetails && 
-                 data.paymentDetails.cardNumber && 
-                 data.paymentDetails.expiryDate && 
-                 data.paymentDetails.cvv && 
-                 data.paymentDetails.cardHolderName;
+                 data.paymentDetails.razorpayOrderId && 
+                 data.paymentDetails.razorpayPaymentId && 
+                 data.paymentDetails.razorpaySignature;
         }
         return true;
       },
       {
-        message: 'Payment details are required for credit card payments',
+        message: 'Razorpay payment details are required for credit card payments',
         path: ['paymentDetails'],
       }
     ),
@@ -97,6 +93,38 @@ export class BookingController {
       seatIds: z.array(z.string().uuid('Invalid seat ID')).min(1, 'At least one seat is required'),
     }),
   });
+
+  // Add the missing schema
+  public getEventByIdSchema = z.object({
+    params: z.object({
+      id: z.string().uuid('Invalid event ID'),
+    }),
+  });
+
+  /**
+   * Get event seats
+   */
+  getEventSeats = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      
+      const seats = await this.seatRepository.find({
+        where: { eventId: id },
+        order: { row: 'ASC', seatNumber: 'ASC' }
+      });
+      
+      res.json({ 
+        success: true, 
+        data: seats 
+      });
+    } catch (error) {
+      console.error('Get event seats error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error' 
+      });
+    }
+  };
 
   /**
    * Create a new booking
@@ -170,47 +198,112 @@ export class BookingController {
 
       // Update seats with booking ID
       await this.seatRepository.update(
-        { id: { $in: bookingData.seatIds } } as any,
-        { bookingId: savedBooking.id, isBooked: true }
+        { id: In(bookingData.seatIds) },
+        { bookingId: savedBooking.id }
       );
 
       // Process payment
       try {
-        const payment = await this.paymentService.processPayment(
-          savedBooking.id,
-          totalAmount,
-          bookingData.paymentMethod,
-          bookingData.paymentDetails
-        );
-
-        if (payment.status === 'COMPLETED') {
-          booking.status = BookingStatus.CONFIRMED;
-          await this.bookingRepository.save(booking);
-
-          // Remove seat reservations
-          bookingData.seatIds.forEach(seatId => {
-            this.seatReservations.delete(seatId);
-          });
-
-          // Send confirmation email
-          const user = await this.userRepository.findOne({ where: { id: userId } });
-          if (user) {
-            await this.sendBookingConfirmation(user, savedBooking, event);
+        // For Razorpay credit card payments, verify the payment signature
+        if (bookingData.paymentMethod === PaymentMethod.CREDIT_CARD && 
+            bookingData.paymentDetails?.razorpayOrderId && 
+            bookingData.paymentDetails?.razorpayPaymentId && 
+            bookingData.paymentDetails?.razorpaySignature) {
+          
+          const isValid = this.paymentService.verifyPaymentSignature(
+            bookingData.paymentDetails.razorpayOrderId,
+            bookingData.paymentDetails.razorpayPaymentId,
+            bookingData.paymentDetails.razorpaySignature
+          );
+          
+          if (!isValid) {
+            // Payment signature verification failed
+            await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+            res.status(400).json({ 
+              success: false, 
+              error: 'Payment verification failed' 
+            } as ApiResponse<null>);
+            return;
           }
-
-          const bookingResponse = await this.getBookingDetails(savedBooking.id);
-          res.status(201).json({ 
-            success: true, 
-            data: bookingResponse,
-            message: 'Booking created successfully' 
-          } as ApiResponse<BookingResponse>);
+          
+          // Create a payment record
+          const payment = await this.paymentService.processPayment(
+            savedBooking.id,
+            totalAmount,
+            bookingData.paymentMethod,
+            {
+              transactionId: bookingData.paymentDetails.razorpayPaymentId,
+              orderId: bookingData.paymentDetails.razorpayOrderId
+            }
+          );
+          
+          if (payment.status === 'completed') {
+            booking.status = BookingStatus.CONFIRMED;
+            await this.bookingRepository.save(booking);
+            
+            // Remove seat reservations
+            bookingData.seatIds.forEach(seatId => {
+              this.seatReservations.delete(seatId);
+            });
+            
+            // Send confirmation email
+            const user = await this.userRepository.findOne({ where: { id: userId } });
+            if (user) {
+              await this.sendBookingConfirmation(user, savedBooking, event);
+            }
+            
+            const bookingResponse = await this.getBookingDetails(savedBooking.id);
+            res.status(201).json({ 
+              success: true, 
+              data: bookingResponse,
+              message: 'Booking created successfully' 
+            } as ApiResponse<BookingResponse>);
+          } else {
+            // Payment failed
+            await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+            res.status(400).json({ 
+              success: false, 
+              error: 'Payment processing failed' 
+            } as ApiResponse<null>);
+          }
         } else {
-          // Payment failed, cleanup
-          await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
-          res.status(400).json({ 
-            success: false, 
-            error: 'Payment processing failed' 
-          } as ApiResponse<null>);
+          // For wallet payments or other methods
+          const payment = await this.paymentService.processPayment(
+            savedBooking.id,
+            totalAmount,
+            bookingData.paymentMethod,
+            bookingData.paymentDetails
+          );
+
+          if (payment.status === 'completed') {
+            booking.status = BookingStatus.CONFIRMED;
+            await this.bookingRepository.save(booking);
+
+            // Remove seat reservations
+            bookingData.seatIds.forEach(seatId => {
+              this.seatReservations.delete(seatId);
+            });
+
+            // Send confirmation email
+            const user = await this.userRepository.findOne({ where: { id: userId } });
+            if (user) {
+              await this.sendBookingConfirmation(user, savedBooking, event);
+            }
+
+            const bookingResponse = await this.getBookingDetails(savedBooking.id);
+            res.status(201).json({ 
+              success: true, 
+              data: bookingResponse,
+              message: 'Booking created successfully' 
+            } as ApiResponse<BookingResponse>);
+          } else {
+            // Payment failed, cleanup
+            await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+            res.status(400).json({ 
+              success: false, 
+              error: 'Payment processing failed' 
+            } as ApiResponse<null>);
+          }
         }
       } catch (paymentError) {
         // Payment failed, cleanup
@@ -359,7 +452,7 @@ export class BookingController {
       }
 
       // Check if cancellation is allowed (e.g., not too close to event date)
-      const eventDate = new Date(booking.event.date);
+      const eventDate = new Date(booking.event.eventDate);
       const now = new Date();
       const hoursUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
@@ -378,7 +471,7 @@ export class BookingController {
       // Free up seats
       await this.seatRepository.update(
         { bookingId: booking.id },
-        { bookingId: null, isBooked: false }
+        { bookingId: undefined }
       );
 
       // Process refund if payment was completed
@@ -468,9 +561,9 @@ export class BookingController {
     // Check if seats exist and are available
     const seats = await this.seatRepository.find({
       where: { 
-        id: { $in: seatIds } as any,
+        id: In(seatIds),
         eventId,
-        isBooked: false 
+        bookingId: IsNull()
       }
     });
 
@@ -505,19 +598,23 @@ export class BookingController {
   }
 
   private async cleanupFailedBooking(bookingId: string, seatIds: string[]): Promise<void> {
-    // Remove booking
+    try {
+      // Delete the booking
     await this.bookingRepository.delete(bookingId);
 
-    // Free up seats
+      // Free up the seats
     await this.seatRepository.update(
-      { id: { $in: seatIds } as any },
-      { bookingId: null, isBooked: false }
+        { id: In(seatIds) },
+        { bookingId: undefined }
     );
 
-    // Remove reservations
+      // Remove seat reservations
     seatIds.forEach(seatId => {
       this.seatReservations.delete(seatId);
     });
+    } catch (error) {
+      console.error('Cleanup failed booking error:', error);
+    }
   }
 
   private async getBookingDetails(bookingId: string): Promise<BookingResponse | null> {
@@ -560,7 +657,7 @@ export class BookingController {
         id: booking.event.id,
         title: booking.event.title,
         description: booking.event.description,
-        date: booking.event.date,
+        date: booking.event.eventDate,
         venue: booking.event.venue,
         category: booking.event.category,
         price: booking.event.price,
@@ -574,27 +671,16 @@ export class BookingController {
     try {
       const referenceNumber = `BK${booking.id.substr(-8).toUpperCase()}`;
       
-      await this.emailService.sendEmail({
-        to: user.email,
-        subject: `Booking Confirmation - ${event.title}`,
-        html: `
-          <h2>Booking Confirmation</h2>
-          <p>Dear ${user.firstName},</p>
-          <p>Your booking has been confirmed!</p>
-          <h3>Booking Details:</h3>
-          <ul>
-            <li><strong>Reference Number:</strong> ${referenceNumber}</li>
-            <li><strong>Event:</strong> ${event.title}</li>
-            <li><strong>Date:</strong> ${event.date}</li>
-            <li><strong>Venue:</strong> ${event.venue}</li>
-            <li><strong>Quantity:</strong> ${booking.quantity} seat(s)</li>
-            <li><strong>Total Amount:</strong> $${booking.totalAmount}</li>
-          </ul>
-          <p>Thank you for your booking!</p>
-        `
-      });
+      await emailService.sendBookingConfirmation(
+        user.email,
+        user.firstName,
+        referenceNumber,
+        event.title,
+        event.eventDate,
+        Buffer.from('Ticket PDF content') // In a real app, generate a PDF ticket here
+      );
     } catch (error) {
-      console.error('Failed to send booking confirmation email:', error);
+      console.error('Send booking confirmation error:', error);
     }
   }
 }

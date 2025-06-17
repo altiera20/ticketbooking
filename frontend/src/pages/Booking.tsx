@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import bookingService, { CreateBookingRequest, Seat } from '../services/booking.service';
-import paymentService from '../services/payment.service';
+import paymentService, { RazorpayResponse } from '../services/payment.service';
 import { Event } from '../types';
 import PaymentForm from '../components/booking/PaymentForm';
 import { AlertCircle, Check, ArrowLeft, RefreshCcw } from 'lucide-react';
+import RazorpayCheckout from '../components/booking/RazorpayCheckout';
+import BookingSummary from '../components/booking/BookingSummary';
 
 interface BookingLocationState {
   event: Event;
@@ -32,6 +34,8 @@ const Booking: React.FC = () => {
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
   const [bookingReference, setBookingReference] = useState<string>('');
   const [insufficientBalance, setInsufficientBalance] = useState(false);
+  const [showRazorpay, setShowRazorpay] = useState<boolean>(false);
+  const [razorpayOrderId, setRazorpayOrderId] = useState<string>('');
 
   // Redirect if no event or seats are selected
   useEffect(() => {
@@ -96,32 +100,7 @@ const Booking: React.FC = () => {
       return true;
     }
 
-    // Validate credit card details
-    if (!paymentDetails.cardNumber.trim()) {
-      setError('Please enter a valid card number');
-      return false;
-    }
-
-    if (!paymentService.validateCardNumber(paymentDetails.cardNumber)) {
-      setError('Invalid card number');
-      return false;
-    }
-
-    if (!paymentDetails.expiryDate.trim() || !paymentService.validateExpiryDate(paymentDetails.expiryDate)) {
-      setError('Please enter a valid expiry date (MM/YY)');
-      return false;
-    }
-
-    if (!paymentDetails.cvv.trim() || !/^\d{3,4}$/.test(paymentDetails.cvv)) {
-      setError('Please enter a valid CVV');
-      return false;
-    }
-
-    if (!paymentDetails.cardHolderName.trim()) {
-      setError('Please enter the cardholder name');
-      return false;
-    }
-
+    // For credit card, we'll use Razorpay so no validation needed here
     return true;
   };
 
@@ -137,11 +116,42 @@ const Booking: React.FC = () => {
     setError(null);
 
     try {
+      if (paymentMethod === 'CREDIT_CARD') {
+        // For credit card payments, create a Razorpay order
+        const order = await paymentService.createOrder(
+          state.totalAmount,
+          'INR',
+          `booking_${Date.now()}`,
+          { eventId: state.event.id }
+        );
+        
+        // Store order ID and show Razorpay checkout
+        setRazorpayOrderId(order.id);
+        setShowRazorpay(true);
+      } else {
+        // For wallet payments, proceed with booking
+        await processBooking();
+      }
+    } catch (err: any) {
+      console.error('Error creating booking:', err);
+      setError(err.message || 'Failed to complete booking. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  // Process booking after payment
+  const processBooking = async (paymentResponse?: RazorpayResponse) => {
+    try {
       const bookingRequest: CreateBookingRequest = {
         eventId: state.event.id,
         seatIds: state.selectedSeats.map(seat => seat.id),
         paymentMethod: paymentMethod,
-        paymentDetails: paymentMethod === 'CREDIT_CARD' ? paymentDetails : undefined
+        paymentDetails: paymentMethod === 'CREDIT_CARD' ? {
+          ...paymentDetails,
+          razorpayOrderId: paymentResponse?.razorpay_order_id,
+          razorpayPaymentId: paymentResponse?.razorpay_payment_id,
+          razorpaySignature: paymentResponse?.razorpay_signature
+        } : undefined
       };
 
       const booking = await bookingService.createBooking(bookingRequest);
@@ -162,7 +172,36 @@ const Booking: React.FC = () => {
       setError(err.message || 'Failed to complete booking. Please try again.');
     } finally {
       setLoading(false);
+      setShowRazorpay(false);
     }
+  };
+
+  // Handle Razorpay success
+  const handleRazorpaySuccess = async (response: RazorpayResponse) => {
+    try {
+      // Verify payment
+      await paymentService.verifyPayment(
+        response.razorpay_payment_id,
+        response.razorpay_order_id,
+        response.razorpay_signature
+      );
+      
+      // Process booking with payment details
+      await processBooking(response);
+    } catch (err: any) {
+      console.error('Error processing payment:', err);
+      setError(err.message || 'Payment verification failed. Please try again.');
+      setLoading(false);
+      setShowRazorpay(false);
+    }
+  };
+
+  // Handle Razorpay failure
+  const handleRazorpayFailure = (error: Error) => {
+    console.error('Razorpay error:', error);
+    setError('Payment failed. Please try again.');
+    setLoading(false);
+    setShowRazorpay(false);
   };
 
   // Handle wallet top-up navigation
@@ -238,136 +277,126 @@ const Booking: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <button 
-        onClick={() => navigate(-1)} 
-        className="flex items-center text-blue-600 mb-6 hover:text-blue-800"
-      >
-        <ArrowLeft size={16} className="mr-1" />
-        Back to Seat Selection
-      </button>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">Complete Your Booking</h1>
       
-      <h1 className="text-2xl font-bold mb-6">Complete Your Booking</h1>
-      
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6 flex items-start">
-          <AlertCircle size={20} className="mr-2 flex-shrink-0 mt-0.5" />
-          <span>{error}</span>
+      {bookingConfirmed ? (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+          <h2 className="text-2xl font-semibold text-green-700 mb-4">Booking Confirmed!</h2>
+          <p className="text-lg mb-4">Your booking reference number is: <span className="font-bold">{bookingReference}</span></p>
+          <p className="mb-6">A confirmation email has been sent to your registered email address.</p>
+          <button 
+            onClick={() => navigate('/dashboard')} 
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            View My Bookings
+          </button>
         </div>
-      )}
-      
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2">
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Payment Method</h2>
-            
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="credit-card"
-                  name="paymentMethod"
-                  checked={paymentMethod === 'CREDIT_CARD'}
-                  onChange={() => handlePaymentMethodChange('CREDIT_CARD')}
-                  className="h-4 w-4 text-blue-600"
-                />
-                <label htmlFor="credit-card" className="ml-2 block">
-                  Credit Card
-                </label>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="wallet"
-                  name="paymentMethod"
-                  checked={paymentMethod === 'WALLET'}
-                  onChange={() => handlePaymentMethodChange('WALLET')}
-                  className="h-4 w-4 text-blue-600"
-                />
-                <label htmlFor="wallet" className="ml-2 block">
-                  Wallet (Balance: ${walletBalance.toFixed(2)})
-                </label>
-              </div>
-              
-              {insufficientBalance && paymentMethod === 'WALLET' && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md mt-2">
-                  <p className="font-medium">Insufficient wallet balance</p>
-                  <p className="text-sm">Your current balance (${walletBalance.toFixed(2)}) is less than the required amount (${state.totalAmount.toFixed(2)}).</p>
-                  <button
-                    type="button"
-                    onClick={handleTopUpWallet}
-                    className="mt-2 text-sm bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700 transition-colors"
-                  >
-                    Top Up Wallet
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {paymentMethod === 'CREDIT_CARD' && (
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Payment Details</h2>
-              <PaymentForm 
-                paymentDetails={paymentDetails}
-                onChange={handlePaymentDetailsChange}
-              />
-            </div>
+      ) : (
+        <div>
+          {showRazorpay && razorpayOrderId && (
+            <RazorpayCheckout
+              orderId={razorpayOrderId}
+              amount={state.totalAmount}
+              name={state.event.title}
+              description={`Booking for ${state.selectedSeats.length} seats`}
+              prefill={{
+                name: user?.name,
+                email: user?.email,
+                contact: user?.phone
+              }}
+              onSuccess={handleRazorpaySuccess}
+              onFailure={handleRazorpayFailure}
+            />
           )}
           
-          <div className="flex justify-end">
-            <button
-              onClick={handleSubmitBooking}
-              disabled={loading || (paymentMethod === 'WALLET' && insufficientBalance)}
-              className={`
-                px-6 py-3 rounded-md text-white font-medium flex items-center
-                ${loading || (paymentMethod === 'WALLET' && insufficientBalance) 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700'}
-              `}
-            >
-              {loading ? (
-                <>
-                  <RefreshCcw size={18} className="mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                'Complete Booking'
-              )}
-            </button>
-          </div>
-        </div>
-        
-        <div className="md:col-span-1">
-          <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
-            <h2 className="text-xl font-semibold mb-4">Booking Summary</h2>
-            
-            <div className="mb-4">
-              <h3 className="font-medium">{state.event.title}</h3>
-              <p className="text-gray-600 text-sm">
-                {new Date(state.event.eventDate).toLocaleDateString()} at {new Date(state.event.eventDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </p>
-              <p className="text-gray-600 text-sm">{state.event.venue}</p>
-            </div>
-            
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Selected Seats</span>
-                <span className="font-medium">{state.selectedSeats.length}</span>
-              </div>
-              <div className="text-sm text-gray-600 mb-4">
-                {state.selectedSeats.map(seat => `${seat.section}-${seat.row}-${seat.seatNumber}`).join(', ')}
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="md:col-span-2">
+              <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h2 className="text-xl font-semibold mb-4">Payment Method</h2>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="credit-card"
+                      name="paymentMethod"
+                      checked={paymentMethod === 'CREDIT_CARD'}
+                      onChange={() => handlePaymentMethodChange('CREDIT_CARD')}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <label htmlFor="credit-card" className="ml-2 block">
+                      Credit Card / UPI / Wallet
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="wallet"
+                      name="paymentMethod"
+                      checked={paymentMethod === 'WALLET'}
+                      onChange={() => handlePaymentMethodChange('WALLET')}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <label htmlFor="wallet" className="ml-2 block">
+                      Wallet (Balance: ${walletBalance.toFixed(2)})
+                    </label>
+                  </div>
+                </div>
+                
+                {insufficientBalance && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-yellow-700">
+                      Your wallet balance is insufficient for this booking. 
+                      <button 
+                        onClick={handleTopUpWallet}
+                        className="ml-2 text-blue-600 underline"
+                      >
+                        Top up your wallet
+                      </button>
+                    </p>
+                  </div>
+                )}
+                
+                {paymentMethod === 'CREDIT_CARD' && (
+                  <div className="mt-6">
+                    <p className="text-gray-700 mb-4">
+                      You'll be redirected to our secure payment gateway to complete your payment.
+                    </p>
+                  </div>
+                )}
               </div>
               
-              <div className="flex justify-between font-bold">
-                <span>Total</span>
-                <span>${state.totalAmount.toFixed(2)}</span>
-              </div>
+              {error && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-red-700">{error}</p>
+                </div>
+              )}
+              
+              <button
+                onClick={handleSubmitBooking}
+                disabled={loading || insufficientBalance || state.selectedSeats.length === 0}
+                className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
+                  loading || insufficientBalance || state.selectedSeats.length === 0
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {loading ? 'Processing...' : `Pay $${state.totalAmount.toFixed(2)}`}
+              </button>
+            </div>
+            
+            <div>
+              <BookingSummary
+                event={state.event}
+                selectedSeats={state.selectedSeats}
+                totalAmount={state.totalAmount}
+              />
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

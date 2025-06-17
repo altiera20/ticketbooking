@@ -1,6 +1,8 @@
 // frontend/src/services/booking.service.ts
 
 import axios from 'axios';
+import api from './api';
+import { CreateBookingRequest, BookingResponse } from '../types/booking.types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
@@ -46,23 +48,6 @@ export interface Payment {
   status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
   method: 'CREDIT_CARD' | 'WALLET';
   transactionId?: string;
-}
-
-export interface CreateBookingRequest {
-  eventId: string;
-  seatIds: string[];
-  paymentMethod: 'CREDIT_CARD' | 'WALLET';
-  paymentDetails?: {
-    cardNumber?: string;
-    expiryDate?: string;
-    cvv?: string;
-    cardHolderName?: string;
-  };
-}
-
-export interface ReserveSeatRequest {
-  eventId: string;
-  seatIds: string[];
 }
 
 export interface ApiResponse<T> {
@@ -133,60 +118,89 @@ class BookingService {
 
   /**
    * Create a new booking
+   * @param bookingData - Booking data including payment details
+   * @returns Booking response
    */
-  async createBooking(request: CreateBookingRequest): Promise<Booking> {
+  async createBooking(bookingData: CreateBookingRequest): Promise<BookingResponse> {
     try {
-      const response = await this.api.post<ApiResponse<Booking>>('/bookings', request);
+      const response = await api.post<{ success: boolean; data: BookingResponse }>('/bookings', bookingData);
+      
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
-      throw new Error(response.data.error || 'Failed to create booking');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.message || 'Failed to create booking');
+      
+      throw new Error('Failed to create booking');
+    } catch (error) {
+      console.error('Create booking error:', error);
+      throw new Error('Failed to create booking');
     }
   }
 
   /**
-   * Get user's bookings
+   * Get user bookings
+   * @param page - Page number
+   * @param limit - Items per page
+   * @returns List of bookings
    */
-  async getUserBookings(): Promise<Booking[]> {
+  async getUserBookings(page = 1, limit = 10): Promise<{ bookings: BookingResponse[]; total: number }> {
     try {
-      const response = await this.api.get<ApiResponse<Booking[]>>('/bookings');
+      const response = await api.get<{ 
+        success: boolean; 
+        data: { bookings: BookingResponse[]; total: number } 
+      }>('/bookings/user', {
+        params: { page, limit }
+      });
+      
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
-      throw new Error(response.data.error || 'Failed to fetch bookings');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.message || 'Failed to fetch bookings');
+      
+      throw new Error('Failed to get bookings');
+    } catch (error) {
+      console.error('Get user bookings error:', error);
+      throw new Error('Failed to get bookings');
     }
   }
 
   /**
-   * Get booking details by ID
+   * Get booking by ID
+   * @param id - Booking ID
+   * @returns Booking details
    */
-  async getBookingById(bookingId: string): Promise<Booking> {
+  async getBookingById(id: string): Promise<BookingResponse> {
     try {
-      const response = await this.api.get<ApiResponse<Booking>>(`/bookings/${bookingId}`);
+      const response = await api.get<{ success: boolean; data: BookingResponse }>(`/bookings/${id}`);
+      
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
-      throw new Error(response.data.error || 'Failed to fetch booking');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.message || 'Failed to fetch booking');
+      
+      throw new Error('Booking not found');
+    } catch (error) {
+      console.error('Get booking error:', error);
+      throw new Error('Failed to get booking details');
     }
   }
 
   /**
-   * Cancel a booking
+   * Cancel booking
+   * @param id - Booking ID
+   * @returns Cancellation result
    */
-  async cancelBooking(bookingId: string): Promise<void> {
+  async cancelBooking(id: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await this.api.delete<ApiResponse<null>>(`/bookings/${bookingId}`);
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'Failed to cancel booking');
-      }
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.message || 'Failed to cancel booking');
+      const response = await api.post<{ 
+        success: boolean; 
+        message: string 
+      }>(`/bookings/${id}/cancel`);
+      
+      return {
+        success: response.data.success,
+        message: response.data.message || 'Booking cancelled successfully'
+      };
+    } catch (error) {
+      console.error('Cancel booking error:', error);
+      throw new Error('Failed to cancel booking');
     }
   }
 
@@ -280,7 +294,30 @@ class BookingService {
     
     return 'unknown';
   }
+
+  /**
+   * Reserve seats temporarily
+   * @param eventId - Event ID
+   * @param seatIds - Array of seat IDs
+   * @returns Reserved seats
+   */
+  async reserveSeats(eventId: string, seatIds: string[]): Promise<any[]> {
+    try {
+      const response = await api.post<{ success: boolean; data: any[] }>('/bookings/reserve-seats', {
+        eventId,
+        seatIds
+      });
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      throw new Error('Failed to reserve seats');
+    } catch (error) {
+      console.error('Reserve seats error:', error);
+      throw new Error('Failed to reserve seats');
+    }
+  }
 }
 
-export const bookingService = new BookingService();
-export default bookingService;
+export default new BookingService();

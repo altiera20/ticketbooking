@@ -1,131 +1,93 @@
-import axios from 'axios';
-import { Event, EventFilters, EventType } from '../types';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-
-interface PaginationResponse {
-  total: number;
-  page: number;
-  limit: number;
-  pages: number;
-}
-
-interface EventsResponse {
-  events: Event[];
-  pagination: PaginationResponse;
-}
-
-interface EventResponse {
-  event: Event;
-}
+import api from './api';
+import { Event, Seat } from '../types/event.types';
 
 class EventService {
-  private api = axios.create({
-    baseURL: API_BASE_URL,
-    timeout: 30000,
-  });
-
-  constructor() {
-    // Add auth token to requests
-    this.api.interceptors.request.use((config) => {
-      const token = localStorage.getItem('authToken');
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    });
-
-    // Handle auth errors
-    this.api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          localStorage.removeItem('authToken');
-          window.location.href = '/login';
-        }
-        return Promise.reject(error);
-      }
-    );
-  }
-
   /**
-   * Get events with optional filters
+   * Get all events with optional filtering
+   * @param params - Filter parameters
+   * @returns List of events
    */
-  async getEvents(filters?: EventFilters): Promise<EventsResponse> {
+  async getEvents(params?: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    date?: string;
+    search?: string;
+  }): Promise<{ events: Event[]; total: number }> {
     try {
-      // Build query parameters
-      const params: Record<string, any> = {};
-      if (filters) {
-        if (filters.type) params.type = filters.type;
-        if (filters.minPrice !== undefined) params.minPrice = filters.minPrice;
-        if (filters.maxPrice !== undefined) params.maxPrice = filters.maxPrice;
-        if (filters.date) params.date = filters.date;
-        if (filters.venue) params.venue = filters.venue;
-        if (filters.search) params.search = filters.search;
-        if (filters.sortBy) params.sortBy = filters.sortBy;
-        if (filters.sortOrder) params.sortOrder = filters.sortOrder;
-        if (filters.page) params.page = filters.page;
-        if (filters.limit) params.limit = filters.limit;
+      const response = await api.get<{ success: boolean; data: { events: Event[]; total: number } }>('/events', {
+        params
+      });
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
       }
-
-      const response = await this.api.get<EventsResponse>('/events', { params });
-      return response.data;
-    } catch (error: any) {
-      console.error('Error fetching events:', error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch events');
+      
+      throw new Error('Failed to fetch events');
+    } catch (error) {
+      console.error('Get events error:', error);
+      throw new Error('Failed to fetch events');
     }
   }
 
   /**
    * Get event by ID
+   * @param id - Event ID
+   * @returns Event details
    */
   async getEventById(id: string): Promise<Event> {
     try {
-      const response = await this.api.get<EventResponse>(`/events/${id}`);
-      return response.data.event;
-    } catch (error: any) {
-      console.error(`Error fetching event ${id}:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch event details');
+      const response = await api.get<{ success: boolean; data: Event }>(`/events/${id}`);
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      throw new Error('Event not found');
+    } catch (error) {
+      console.error('Get event error:', error);
+      throw new Error('Failed to fetch event details');
     }
   }
 
   /**
-   * Create a new event (vendor only)
+   * Get seats for an event
+   * @param eventId - Event ID
+   * @returns List of seats
    */
-  async createEvent(eventData: Partial<Event>): Promise<Event> {
+  async getEventSeats(eventId: string): Promise<Seat[]> {
     try {
-      const response = await this.api.post<EventResponse>('/events', eventData);
-      return response.data.event;
-    } catch (error: any) {
-      console.error('Error creating event:', error);
-      throw new Error(error.response?.data?.message || 'Failed to create event');
+      const response = await api.get<{ success: boolean; data: Seat[] }>(`/events/${eventId}/seats`);
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      throw new Error('Failed to fetch seats');
+    } catch (error) {
+      console.error('Get event seats error:', error);
+      throw new Error('Failed to fetch seats');
     }
   }
 
   /**
-   * Update an event (vendor only)
+   * Get event categories
+   * @returns List of categories
    */
-  async updateEvent(id: string, eventData: Partial<Event>): Promise<Event> {
+  async getCategories(): Promise<string[]> {
     try {
-      const response = await this.api.put<EventResponse>(`/events/${id}`, eventData);
-      return response.data.event;
-    } catch (error: any) {
-      console.error(`Error updating event ${id}:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to update event');
-    }
-  }
-
-  /**
-   * Delete an event (vendor only)
-   */
-  async deleteEvent(id: string): Promise<void> {
-    try {
-      await this.api.delete(`/events/${id}`);
-    } catch (error: any) {
-      console.error(`Error deleting event ${id}:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to delete event');
+      const response = await api.get<{ success: boolean; data: string[] }>('/events/categories');
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      throw new Error('Failed to fetch categories');
+    } catch (error) {
+      console.error('Get categories error:', error);
+      throw new Error('Failed to fetch categories');
     }
   }
 }
 
-export const eventService = new EventService();
+export default new EventService();

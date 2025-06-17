@@ -26,7 +26,7 @@ router.get(
 router.post(
   '/reserve-seats',
   validate(bookingController.reserveSeatsSchema),
-  bookingController.reserveSeats
+  bookingController.reserveSeatsTemporarily
 );
 
 // Create a new booking

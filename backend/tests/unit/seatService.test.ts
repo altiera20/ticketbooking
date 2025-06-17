@@ -2,6 +2,8 @@ import { BookingController } from '../../src/controllers/booking.controller';
 import { AppDataSource } from '../../src/config/database';
 import { Seat } from '../../src/models/Seat.model';
 import { mockTime, delay } from '../utils/concurrency-utils';
+import { In, IsNull } from 'typeorm';
+import { jest } from '@jest/globals';
 
 // Mock TypeORM
 jest.mock('../../src/config/database', () => ({
@@ -106,9 +108,9 @@ describe('Seat Service', () => {
       expect(result.seats).toEqual(mockSeats);
       expect(mockSeatRepo.find).toHaveBeenCalledWith({
         where: { 
-          id: { $in: seatIds } as any,
+          id: In(seatIds),
           eventId,
-          isBooked: false 
+          bookingId: IsNull()
         }
       });
     });

@@ -1,7 +1,8 @@
 // frontend/src/components/booking/SeatSelection.tsx
 
-import React from 'react';
-import { Seat } from '../../services/booking.service';
+import React, { useState, useEffect } from 'react';
+import { Seat } from '../../types/event.types';
+import { formatCurrency } from '../../utils/formatters';
 
 interface SeatSelectionProps {
   seats: Seat[];
@@ -9,110 +10,141 @@ interface SeatSelectionProps {
   onSeatSelect: (seat: Seat) => void;
 }
 
-const SeatSelection: React.FC<SeatSelectionProps> = ({
-  seats,
-  selectedSeats,
-  onSeatSelect,
-}) => {
-  // Group seats by section and row
-  const groupedSeats = seats.reduce((acc, seat) => {
-    const sectionKey = seat.section;
-    const rowKey = seat.row;
-    
-    if (!acc[sectionKey]) {
-      acc[sectionKey] = {};
-    }
-    
-    if (!acc[sectionKey][rowKey]) {
-      acc[sectionKey][rowKey] = [];
-    }
-    
-    acc[sectionKey][rowKey].push(seat);
-    return acc;
-  }, {} as Record<string, Record<string, Seat[]>>);
+const SeatSelection: React.FC<SeatSelectionProps> = ({ seats, selectedSeats, onSeatSelect }) => {
+  const [seatsBySection, setSeatsBySection] = useState<Record<string, Seat[]>>({});
+  const [sections, setSections] = useState<string[]>([]);
+  const [selectedSection, setSelectedSection] = useState<string>('');
 
-  // Sort sections and rows
-  const sections = Object.keys(groupedSeats).sort();
-  
-  // Check if seat is selected
-  const isSeatSelected = (seat: Seat): boolean => {
-    return selectedSeats.some(s => s.id === seat.id);
+  useEffect(() => {
+    // Group seats by section
+    const groupedSeats: Record<string, Seat[]> = {};
+    seats.forEach(seat => {
+      if (!groupedSeats[seat.section]) {
+        groupedSeats[seat.section] = [];
+      }
+      groupedSeats[seat.section].push(seat);
+    });
+
+    // Sort seats within each section by row and seat number
+    Object.keys(groupedSeats).forEach(section => {
+      groupedSeats[section].sort((a, b) => {
+        if (a.row !== b.row) {
+          return a.row.localeCompare(b.row);
+        }
+        return a.seatNumber.localeCompare(b.seatNumber);
+      });
+    });
+
+    setSeatsBySection(groupedSeats);
+    
+    // Get unique sections
+    const uniqueSections = Object.keys(groupedSeats);
+    setSections(uniqueSections);
+    
+    // Set default selected section
+    if (uniqueSections.length > 0 && !selectedSection) {
+      setSelectedSection(uniqueSections[0]);
+    }
+  }, [seats, selectedSection]);
+
+  const isSeatSelected = (seatId: string): boolean => {
+    return selectedSeats.some(seat => seat.id === seatId);
   };
 
-  // Get seat status class
   const getSeatStatusClass = (seat: Seat): string => {
-    if (seat.status === 'booked') {
-      return 'bg-gray-400 cursor-not-allowed';
+    if (isSeatSelected(seat.id)) {
+      return 'bg-blue-500 text-white';
     }
     
-    if (seat.status === 'reserved') {
-      return 'bg-yellow-400 cursor-not-allowed';
+    switch (seat.status) {
+      case 'available':
+        return 'bg-green-100 hover:bg-green-200 text-green-800';
+      case 'booked':
+        return 'bg-gray-300 text-gray-500 cursor-not-allowed';
+      case 'reserved':
+        return 'bg-yellow-100 text-yellow-800 cursor-not-allowed';
+      default:
+        return 'bg-gray-100';
     }
-    
-    if (isSeatSelected(seat)) {
-      return 'bg-blue-600 text-white hover:bg-blue-700';
-    }
-    
-    return 'bg-green-100 hover:bg-green-200';
   };
+
+  const handleSectionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSection(e.target.value);
+  };
+
+  // Group seats by row for the selected section
+  const seatsByRow: Record<string, Seat[]> = {};
+  if (selectedSection && seatsBySection[selectedSection]) {
+    seatsBySection[selectedSection].forEach(seat => {
+      if (!seatsByRow[seat.row]) {
+        seatsByRow[seat.row] = [];
+      }
+      seatsByRow[seat.row].push(seat);
+    });
+  }
 
   return (
-    <div className="mb-6">
+    <div className="seat-selection">
       <div className="mb-4">
-        <div className="flex items-center justify-center space-x-8 mb-6">
+        <label htmlFor="section-select" className="block text-sm font-medium text-gray-700 mb-1">
+          Select Section
+        </label>
+        <select
+          id="section-select"
+          className="w-full p-2 border border-gray-300 rounded-md"
+          value={selectedSection}
+          onChange={handleSectionChange}
+        >
+          {sections.map(section => (
+            <option key={section} value={section}>
+              {section}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mb-6">
+        <div className="flex justify-between mb-2">
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-green-100 border border-gray-300 rounded-sm mr-2"></div>
+            <div className="w-4 h-4 bg-green-100 mr-1"></div>
             <span className="text-sm">Available</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-blue-600 rounded-sm mr-2"></div>
+            <div className="w-4 h-4 bg-blue-500 mr-1"></div>
             <span className="text-sm">Selected</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-gray-400 rounded-sm mr-2"></div>
+            <div className="w-4 h-4 bg-gray-300 mr-1"></div>
             <span className="text-sm">Booked</span>
           </div>
-        <div className="flex items-center">
-            <div className="w-4 h-4 bg-yellow-400 rounded-sm mr-2"></div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-yellow-100 mr-1"></div>
             <span className="text-sm">Reserved</span>
           </div>
         </div>
-        
-        <div className="w-full bg-gray-200 p-2 text-center mb-6 rounded">
-          <div className="text-sm font-medium">SCREEN</div>
-        </div>
       </div>
-      
-      {sections.map(section => (
-        <div key={section} className="mb-8">
-          <h3 className="text-lg font-medium mb-2">Section {section}</h3>
-          
-          {Object.keys(groupedSeats[section]).sort().map(row => (
-            <div key={`${section}-${row}`} className="mb-3">
-              <div className="flex items-center mb-1">
-                <span className="text-sm font-medium w-8">Row {row}</span>
-                <div className="flex flex-wrap gap-1">
-                  {groupedSeats[section][row].sort((a, b) => 
-                    parseInt(a.seatNumber) - parseInt(b.seatNumber)
-                  ).map(seat => (
-                    <button
-                      key={seat.id}
-                      onClick={() => seat.status === 'available' && onSeatSelect(seat)}
-                      disabled={seat.status !== 'available'}
-                      className={`
-                        w-8 h-8 rounded-sm text-xs font-medium flex items-center justify-center
-                        transition-colors border border-gray-300
-                        ${getSeatStatusClass(seat)}
-                      `}
-                      title={`Section ${seat.section}, Row ${seat.row}, Seat ${seat.seatNumber} - $${seat.price}`}
-                    >
-                      {seat.seatNumber}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
+
+      <div className="mb-8 text-center p-2 bg-gray-800 text-white font-bold rounded">
+        STAGE
+      </div>
+
+      {Object.keys(seatsByRow).map(row => (
+        <div key={row} className="mb-4">
+          <div className="text-sm font-medium text-gray-700 mb-1">Row {row}</div>
+          <div className="flex flex-wrap gap-2">
+            {seatsByRow[row].map(seat => (
+              <button
+                key={seat.id}
+                className={`w-12 h-12 rounded-md flex flex-col items-center justify-center text-xs ${getSeatStatusClass(seat)}`}
+                onClick={() => seat.status === 'available' && onSeatSelect(seat)}
+                disabled={seat.status !== 'available' && !isSeatSelected(seat.id)}
+                title={`${seat.section} - Row ${seat.row} - Seat ${seat.seatNumber} - ${formatCurrency(seat.price)}`}
+              >
+                <span>{seat.seatNumber}</span>
+                <span className="text-xs">{formatCurrency(seat.price)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ))}
     </div>
