@@ -6,22 +6,25 @@ import { Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { toast } from 'react-hot-toast';
 import { FaUser, FaEnvelope, FaLock, FaEye, FaEyeSlash, FaPhone } from 'react-icons/fa';
-import { registerStart, registerSuccess, registerFailure } from '../../store/slices/authSlice';
+import { loginStart, loginSuccess, loginFailure } from '../../store/slices/authSlice';
 import { UserRole } from '../../types';
 import Button from '../common/Button';
 import Input from '../common/Input';
+import authService from '../../services/auth.service';
 
 // Define validation schema with Zod
 const registerSchema = z.object({
   firstName: z.string()
     .min(2, 'First name must be at least 2 characters')
-    .max(50, 'First name must not exceed 50 characters'),
+    .max(100, 'First name must not exceed 100 characters')
+    .regex(/^[a-zA-Z\s]*$/, 'First name must contain only letters and spaces'),
   lastName: z.string()
     .min(2, 'Last name must be at least 2 characters')
-    .max(50, 'Last name must not exceed 50 characters'),
+    .max(100, 'Last name must not exceed 100 characters')
+    .regex(/^[a-zA-Z\s]*$/, 'Last name must contain only letters and spaces'),
   email: z.string()
     .email('Please enter a valid email address')
-    .min(1, 'Email is required'),
+    .max(255, 'Email must not exceed 255 characters'),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .max(100, 'Password must not exceed 100 characters')
@@ -31,7 +34,9 @@ const registerSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
   confirmPassword: z.string(),
   role: z.nativeEnum(UserRole).default(UserRole.USER),
-  phone: z.string().optional(),
+  phone: z.string()
+    .regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number format')
+    .optional(),
   agreeToTerms: z.boolean().refine(val => val === true, {
     message: 'You must agree to the terms and conditions',
   }),
@@ -79,40 +84,22 @@ const RegisterForm: React.FC = () => {
   
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      dispatch(registerStart());
+      dispatch(loginStart());
       
-      // Simulate API call
-      // In a real app, you would call your API here
-      const response = await new Promise<{ user: any; accessToken: string; refreshToken: string }>((resolve) => {
-        setTimeout(() => {
-          resolve({
-            user: {
-              id: '1',
-              firstName: data.firstName,
-              lastName: data.lastName,
-              email: data.email,
-              role: data.role,
-              walletBalance: 0,
-              isEmailVerified: false,
-              isActive: true,
-              phone: data.phone,
-            },
-            accessToken: 'fake-access-token',
-            refreshToken: 'fake-refresh-token',
-          });
-        }, 1000);
-      });
+      // Use the actual authService instead of mock data
+      const { user, token, refreshToken } = await authService.register(data);
       
-      dispatch(registerSuccess({
-        user: response.user,
-        token: response.accessToken,
-        refreshToken: response.refreshToken,
+      dispatch(loginSuccess({
+        user,
+        token,
+        refreshToken
       }));
       
       toast.success('Registration successful! Please verify your email.');
-    } catch (error) {
-      dispatch(registerFailure('Registration failed'));
-      toast.error('Registration failed. Please try again.');
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      dispatch(loginFailure(errorMessage));
+      toast.error(errorMessage);
     }
   };
   
@@ -122,7 +109,6 @@ const RegisterForm: React.FC = () => {
         <div>
           <Input
             id="firstName"
-            name="firstName"
             type="text"
             label="First name"
             placeholder="John"
@@ -137,7 +123,6 @@ const RegisterForm: React.FC = () => {
         <div>
           <Input
             id="lastName"
-            name="lastName"
             type="text"
             label="Last name"
             placeholder="Doe"
@@ -153,7 +138,6 @@ const RegisterForm: React.FC = () => {
       <div>
         <Input
           id="email"
-          name="email"
           type="email"
           label="Email address"
           placeholder="you@example.com"
@@ -169,7 +153,6 @@ const RegisterForm: React.FC = () => {
         <div className="relative">
           <Input
             id="password"
-            name="password"
             type={showPassword ? 'text' : 'password'}
             label="Password"
             placeholder="••••••••"
@@ -194,7 +177,6 @@ const RegisterForm: React.FC = () => {
         <div className="relative">
           <Input
             id="confirmPassword"
-            name="confirmPassword"
             type={showConfirmPassword ? 'text' : 'password'}
             label="Confirm password"
             placeholder="••••••••"
@@ -284,9 +266,8 @@ const RegisterForm: React.FC = () => {
         <div>
           <Input
             id="phone"
-            name="phone"
             type="tel"
-            label="Phone number (optional for vendors)"
+            label="Phone number (for vendors)"
             placeholder="+1 (555) 123-4567"
             leftIcon={<FaPhone />}
             error={errors.phone?.message}

@@ -8,6 +8,9 @@ export enum EventType {
   MOVIE = 'movie',
   CONCERT = 'concert',
   TRAIN = 'train',
+  SPORTS = 'sports',
+  COMEDY = 'comedy',
+  CULTURAL = 'cultural'
 }
 
 export enum BookingStatus {
@@ -71,6 +74,9 @@ export interface CreateBookingRequest {
     expiryDate?: string;
     cvv?: string;
     cardHolderName?: string;
+    razorpayOrderId?: string;
+    razorpayPaymentId?: string;
+    razorpaySignature?: string;
   };
 }
 

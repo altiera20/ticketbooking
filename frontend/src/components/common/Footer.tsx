@@ -2,142 +2,83 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { FaFacebook, FaTwitter, FaInstagram, FaLinkedin } from 'react-icons/fa';
 
+const FooterLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => (
+  <Link to={to} className="font-body text-fluid-base text-laser-lemon hover:text-light-text hover:scale-110 transform transition-transform duration-300 block w-fit">
+    {children}
+  </Link>
+);
+
+const SocialIcon: React.FC<{ href: string; icon: React.ElementType; label: string }> = ({ href, icon: Icon, label }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="text-light-text hover:text-neon-green transform transition-transform duration-300 hover:scale-125 hover:animate-pulse-glow">
+    <Icon className="h-8 w-8" />
+  </a>
+);
+
 const Footer: React.FC = () => {
-  const currentYear = new Date().getFullYear();
-  
+  const socialLinks = [
+    { icon: FaFacebook, href: 'https://facebook.com', label: 'Facebook' },
+    { icon: FaTwitter, href: 'https://twitter.com', label: 'Twitter' },
+    { icon: FaInstagram, href: 'https://instagram.com', label: 'Instagram' },
+    { icon: FaLinkedin, href: 'https://linkedin.com', label: 'LinkedIn' },
+  ];
+
+  const footerSections = [
+    {
+      title: 'About Us',
+      links: [
+        { text: 'Our Story', href: '/about' },
+        { text: 'Careers', href: '/careers' },
+        { text: 'Press', href: '/press' },
+      ],
+    },
+    {
+      title: 'Quick Links',
+      links: [
+        { text: 'Home', href: '/' },
+        { text: 'Events', href: '/events' },
+        { text: 'My Tickets', href: '/tickets' },
+        { text: 'FAQs', href: '/faq' },
+      ],
+    },
+    {
+      title: 'Support',
+      links: [
+        { text: 'Contact Us', href: '/contact' },
+        { text: 'Help Center', href: '/help' },
+        { text: 'Terms of Service', href: '/terms' },
+        { text: 'Privacy Policy', href: '/privacy' },
+      ],
+    },
+  ];
+
   return (
-    <footer className="bg-white dark:bg-dark-700 shadow-inner transition-colors duration-300">
-      <div className="container mx-auto px-4 py-8 md:py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Company Info */}
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">TicketBooking</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-4">
-              Your one-stop solution for booking tickets to movies, concerts, and train journeys.
-            </p>
-            <div className="flex space-x-4">
-              <a
-                href="https://facebook.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                aria-label="Facebook"
-              >
-                <FaFacebook className="h-5 w-5" />
-              </a>
-              <a
-                href="https://twitter.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                aria-label="Twitter"
-              >
-                <FaTwitter className="h-5 w-5" />
-              </a>
-              <a
-                href="https://instagram.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                aria-label="Instagram"
-              >
-                <FaInstagram className="h-5 w-5" />
-              </a>
-              <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                aria-label="LinkedIn"
-              >
-                <FaLinkedin className="h-5 w-5" />
-              </a>
-            </div>
-          </div>
-          
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Quick Links</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link to="/events" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Events
-                </Link>
-              </li>
-              <li>
-                <Link to="/about" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  About Us
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Contact Us
-                </Link>
-              </li>
+    <footer className="mt-auto p-8 bg-gradient-to-r from-neon-pink via-vibrant-purple to-electric-blue animate-gradient-shift shadow-neon-outline-blue border-t-4 border-laser-lemon">
+      <div className="w-full grid grid-cols-1 md:grid-cols-4 gap-8">
+        {footerSections.map((section) => (
+          <div key={section.title}>
+            <h3 className="font-heading text-fluid-xl text-light-text uppercase tracking-widest text-shadow-neon-pink">{section.title}</h3>
+            <ul className="mt-6 space-y-4">
+              {section.links.map((link) => (
+                <li key={link.text}>
+                  <FooterLink to={link.href}>{link.text}</FooterLink>
+                </li>
+              ))}
             </ul>
           </div>
-          
-          {/* Events */}
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Event Types</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/events?type=movie" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Movies
-                </Link>
-              </li>
-              <li>
-                <Link to="/events?type=concert" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Concerts
-                </Link>
-              </li>
-              <li>
-                <Link to="/events?type=train" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Train Tickets
-                </Link>
-              </li>
-            </ul>
-          </div>
-          
-          {/* Support */}
-          <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Support</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link to="/faq" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  FAQ
-                </Link>
-              </li>
-              <li>
-                <Link to="/terms" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Terms of Service
-                </Link>
-              </li>
-              <li>
-                <Link to="/privacy" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/help" className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
-                  Help Center
-                </Link>
-              </li>
-            </ul>
+        ))}
+
+        <div>
+          <h3 className="font-heading text-fluid-xl text-light-text uppercase tracking-widest text-shadow-neon-pink">Connect</h3>
+          <div className="mt-6 flex space-x-6">
+            {socialLinks.map((social) => (
+              <SocialIcon key={social.label} {...social} />
+            ))}
           </div>
         </div>
-        
-        {/* Copyright */}
-        <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-center text-gray-500 dark:text-gray-400">
-            &copy; {currentYear} TicketBooking. All rights reserved.
-          </p>
-        </div>
+      </div>
+
+      <div className="mt-12 border-t-2 border-laser-lemon pt-8 text-center">
+        <p className="font-body text-fluid-sm text-light-text text-shadow-neon-pink">&copy; {new Date().getFullYear()} TicketBooking. All rights reserved. Stay weird.</p>
       </div>
     </footer>
   );

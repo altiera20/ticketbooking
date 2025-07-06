@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../components/common/Layout';
 import EventFilters from '../components/event/EventFilters';
 import EventList from '../components/event/EventList';
 import { Event, EventFilters as EventFiltersType } from '../types';
 import { FaThList, FaThLarge } from 'react-icons/fa';
-import { eventService } from '../services/event.service';
+import eventService from '../services/event.service';
+
+const PaginationButton: React.FC<{ onClick: () => void; disabled: boolean; children: React.ReactNode }> = ({ onClick, disabled, children }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className="font-heading text-fluid-base px-6 py-2 rounded-md shadow-3d bg-gradient-to-br from-neon-green to-electric-blue text-dark-text font-bold border-2 border-light-text transform transition-all duration-300 hover:scale-105 active:translate-y-1 active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 disabled:shadow-3d disabled:translate-y-0"
+  >
+    {children}
+  </button>
+);
 
 const Events: React.FC = () => {
   const navigate = useNavigate();
@@ -15,128 +24,112 @@ const Events: React.FC = () => {
   const [filters, setFilters] = useState<EventFiltersType>({
     sortBy: 'date',
     sortOrder: 'asc',
+    page: 1,
+    limit: 9,
   });
   const [events, setEvents] = useState<Event[]>([]);
   const [pagination, setPagination] = useState({
     total: 0,
     page: 1,
-    limit: 10,
+    limit: 9,
     pages: 1,
   });
-  
-  // Fetch events on initial load and when filters change
+
   useEffect(() => {
     fetchEvents(filters);
   }, [filters]);
-  
-  // Fetch events from API
+
   const fetchEvents = async (eventFilters: EventFiltersType) => {
     try {
       setLoading(true);
       setError(undefined);
-      
       const response = await eventService.getEvents(eventFilters);
       setEvents(response.events);
-      setPagination(response.pagination);
+      setPagination({
+        total: response.total,
+        page: eventFilters.page || 1,
+        limit: eventFilters.limit || 9,
+        pages: Math.ceil(response.total / (eventFilters.limit || 9)),
+      });
     } catch (err: any) {
-      console.error('Error fetching events:', err);
-      setError(err.message || 'Failed to load events. Please try again.');
+      setError(err.message || 'Failed to load events.');
       setEvents([]);
     } finally {
       setLoading(false);
     }
   };
-  
-  // Handle filter changes
+
   const handleFilterChange = (newFilters: EventFiltersType) => {
-    setFilters(newFilters);
+    setFilters(prev => ({ ...prev, ...newFilters, page: 1 }));
   };
-        
-  // Handle event click - navigate to event details page
+
   const handleEventClick = (event: Event) => {
     navigate(`/events/${event.id}`);
   };
-  
-  // Toggle view type
+
   const toggleViewType = () => {
     setViewType(viewType === 'grid' ? 'list' : 'grid');
   };
-  
-  // Handle retry on error
+
   const handleRetry = () => {
     fetchEvents(filters);
   };
-  
+
+  const handlePageChange = (newPage: number) => {
+    setFilters(prev => ({ ...prev, page: newPage }));
+  };
+
   return (
-    <div className="w-full">
-      <div className="bg-primary-50 dark:bg-dark-900 py-8">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Browse Events
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Find and book tickets for movies, concerts, and train journeys
-          </p>
-        </div>
-      </div>
-      
-      <div className="container mx-auto px-4 py-6">
+    <div className="w-full p-8">
+      <section className="text-center mb-12">
+        <h1 className="font-heading text-fluid-7xl text-light-text animate-glow leading-tight">
+          Find Your <span className="text-laser-lemon">Next</span> Event
+        </h1>
+        <p className="font-body text-fluid-lg text-light-text/80 max-w-3xl mx-auto mt-4">
+          Explore a universe of possibilities. The hottest tickets in the galaxy are right here.
+        </p>
+      </section>
+
+      <div className="bg-dark-bg/30 backdrop-blur-sm p-6 rounded-2xl border-2 border-vibrant-purple shadow-neon-outline-purple mb-8">
         <EventFilters filters={filters} onFilterChange={handleFilterChange} />
-        
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <span className="text-gray-700 dark:text-gray-300">
-              {!loading && !error ? `${pagination.total} events found` : ''}
-            </span>
-          </div>
-          <div>
-            <button
-              onClick={toggleViewType}
-              className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-              aria-label={viewType === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-              disabled={loading || events.length === 0}
-            >
-              {viewType === 'grid' ? <FaThList size={20} /> : <FaThLarge size={20} />}
-            </button>
-          </div>
-        </div>
-        
-        <EventList
-          events={events}
-          loading={loading}
-          error={error}
-          viewType={viewType}
-          onEventClick={handleEventClick}
-          onRetry={handleRetry}
-        />
-        
-        {/* Pagination */}
-        {!loading && !error && pagination.pages > 1 && (
-          <div className="flex justify-center mt-8">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setFilters({ ...filters, page: Math.max(1, (filters.page || 1) - 1) })}
-                disabled={(filters.page || 1) <= 1}
-                className="px-4 py-2 border rounded-md bg-white text-gray-700 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              
-              <span className="px-4 py-2 border rounded-md bg-white">
-                Page {filters.page || 1} of {pagination.pages}
-              </span>
-              
-              <button
-                onClick={() => setFilters({ ...filters, page: Math.min(pagination.pages, (filters.page || 1) + 1) })}
-                disabled={(filters.page || 1) >= pagination.pages}
-                className="px-4 py-2 border rounded-md bg-white text-gray-700 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      <div className="flex justify-between items-center mb-6">
+        <div className="font-body text-fluid-base text-neon-pink text-shadow-neon-pink">
+          {!loading && !error ? `${pagination.total} events found` : 'Searching the cosmos...'}
+        </div>
+        <button
+          onClick={toggleViewType}
+          className="p-3 rounded-md text-laser-lemon bg-dark-bg/50 border-2 border-laser-lemon shadow-3d transform transition-transform duration-300 hover:scale-110 hover:bg-vibrant-purple active:translate-y-1 disabled:opacity-50"
+          aria-label={viewType === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+          disabled={loading || events.length === 0}
+        >
+          {viewType === 'grid' ? <FaThList size={24} /> : <FaThLarge size={24} />}
+        </button>
+      </div>
+
+      <EventList
+        events={events}
+        loading={loading}
+        error={error}
+        viewType={viewType}
+        onEventClick={handleEventClick}
+        onRetry={handleRetry}
+      />
+
+      {!loading && !error && pagination.pages > 1 && (
+        <div className="flex justify-center items-center mt-12 space-x-6">
+          <PaginationButton onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page <= 1}>
+            Previous
+          </PaginationButton>
+          <span className="font-heading text-fluid-lg text-light-text text-shadow-neon-green">
+            Page {pagination.page} of {pagination.pages}
+          </span>
+          <PaginationButton onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page >= pagination.pages}>
+            Next
+          </PaginationButton>
+        </div>
+      )}
     </div>
   );
 };

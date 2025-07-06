@@ -103,3 +103,8 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+# Ignore build artifacts, installers, and uploads
+backend/dist_test/
+backend/uploads/
+*.msi
+*.jpg

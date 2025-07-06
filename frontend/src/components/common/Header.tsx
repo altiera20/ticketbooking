@@ -1,207 +1,133 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { FaSun, FaMoon, FaBars, FaTimes, FaUser, FaSignOutAlt } from 'react-icons/fa';
-import { toggleTheme } from '../../store/slices/themeSlice';
-import { logout } from '../../store/slices/authSlice';
-import { RootState } from '../../store';
-import Button from './Button';
+import { Link, NavLink as RouterNavLink } from 'react-router-dom';
+import { FaUser, FaSignOutAlt, FaBars, FaTimes } from 'react-icons/fa';
+import { useAuth } from '../../contexts/AuthContext';
+import { UserRole } from '../../types';
+
+// Custom NavLink for active styling
+const NavLink: React.FC<{ to: string; onClick: () => void; children: React.ReactNode }> = ({ to, onClick, children }) => (
+  <RouterNavLink
+    to={to}
+    onClick={onClick}
+    className={({ isActive }) =>
+      `font-heading text-fluid-lg transition-colors duration-300 ${
+        isActive ? 'text-neon-green animate-glow' : 'text-light-text hover:text-neon-green'
+      }`
+    }
+  >
+    {children}
+  </RouterNavLink>
+);
+
+// Custom AuthButton for consistent styling
+const AuthButton: React.FC<{ to?: string; onClick?: () => void; children: React.ReactNode }> = ({ to, onClick, children }) => {
+  const commonClasses = "font-body text-fluid-base px-5 py-2.5 rounded-md shadow-3d bg-gradient-to-br from-neon-green to-electric-blue text-dark-text font-bold border-2 border-light-text transform transition-all duration-300 hover:scale-105 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2";
+  
+  const content = (
+    <div className="flex items-center justify-center gap-2">
+      {children}
+    </div>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} onClick={onClick} className={commonClasses}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button onClick={onClick} className={commonClasses}>
+      {content}
+    </button>
+  );
+};
 
 const Header: React.FC = () => {
+  const { user, isAuthenticated, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { mode } = useSelector((state: RootState) => state.theme);
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
-  const dispatch = useDispatch();
-  
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-  
-  const handleThemeToggle = () => {
-    dispatch(toggleTheme());
-  };
-  
+
   const handleLogout = () => {
-    dispatch(logout());
+    logout();
+    setIsMenuOpen(false);
   };
-  
+
+  const navLinks = (
+    <>
+      <NavLink to="/" onClick={() => setIsMenuOpen(false)}>Home</NavLink>
+      <NavLink to="/events" onClick={() => setIsMenuOpen(false)}>Events</NavLink>
+      {isAuthenticated && user?.role === UserRole.VENDOR && (
+        <NavLink to="/vendor/dashboard" onClick={() => setIsMenuOpen(false)}>Dashboard</NavLink>
+      )}
+      <NavLink to="/about" onClick={() => setIsMenuOpen(false)}>About</NavLink>
+      <NavLink to="/contact" onClick={() => setIsMenuOpen(false)}>Contact</NavLink>
+    </>
+  );
+
   return (
-    <header className="bg-white dark:bg-dark-700 shadow-sm sticky top-0 z-10 transition-colors duration-300">
-      <div className="container mx-auto px-4 py-3 md:py-4">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="text-xl font-bold text-primary-600 dark:text-primary-400">
-              TicketBooking
-            </span>
-          </Link>
-          
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-              Home
-            </Link>
-            <Link to="/events" className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-              Events
-            </Link>
-            {isAuthenticated && user?.role === 'vendor' && (
-              <Link to="/vendor/dashboard" className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-                Vendor Dashboard
+    <header className="sticky top-0 z-50 p-4 bg-dark-bg/80 backdrop-blur-lg border-b-2 border-vibrant-purple shadow-neon-outline-purple">
+      <div className="w-full flex items-center justify-between">
+        <Link to="/" className="flex-shrink-0">
+          <h1 className="font-heading text-fluid-4xl text-light-text animate-glow">UniTick</h1>
+        </Link>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center space-x-8">
+          {navLinks}
+        </nav>
+
+        {/* Desktop Auth */}
+        <div className="hidden md:flex items-center space-x-4">
+          {isAuthenticated ? (
+            <div className="flex items-center space-x-4">
+              <Link to="/profile" className="flex items-center space-x-2 font-bold text-fluid-lg text-light-text hover:text-neon-green">
+                <FaUser className="text-neon-green" />
+                <span>{user?.firstName}</span>
               </Link>
-            )}
-            <Link to="/about" className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-              About
-            </Link>
-            <Link to="/contact" className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-              Contact
-            </Link>
+              <AuthButton onClick={handleLogout}><FaSignOutAlt /></AuthButton>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-4">
+              <AuthButton to="/login">Login</AuthButton>
+              <AuthButton to="/register">Register</AuthButton>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Menu Button */}
+        <div className="-mr-2 flex md:hidden">
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-md text-neon-pink hover:text-light-text hover:bg-vibrant-purple/50">
+            <span className="sr-only">Open main menu</span>
+            {isMenuOpen ? <FaTimes className="block h-8 w-8 animate-spin-slow" /> : <FaBars className="block h-8 w-8 animate-pulse-slow" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      {isMenuOpen && (
+        <div className="md:hidden pt-10">
+          <nav className="px-2 pt-2 pb-3 space-y-6 sm:px-3 flex flex-col items-center">
+            {navLinks}
           </nav>
-          
-          {/* Right Side Actions */}
-          <div className="flex items-center space-x-4">
-            {/* Theme Toggle */}
-            <button
-              onClick={handleThemeToggle}
-              className="p-2 rounded-full text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {mode === 'dark' ? <FaSun className="h-5 w-5" /> : <FaMoon className="h-5 w-5" />}
-            </button>
-            
-            {/* Auth Buttons */}
+          <div className="pt-4 pb-3 mt-6 border-t-2 border-vibrant-purple">
             {isAuthenticated ? (
-              <div className="hidden md:flex items-center space-x-4">
-                <Link to="/profile" className="flex items-center space-x-1 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">
-                  <FaUser className="h-4 w-4" />
+              <div className="flex flex-col items-center space-y-4">
+                <Link to="/profile" onClick={() => setIsMenuOpen(false)} className="flex items-center space-x-2 font-bold text-fluid-lg text-light-text hover:text-neon-green">
+                  <FaUser className="text-neon-green" />
                   <span>{user?.firstName}</span>
                 </Link>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  leftIcon={<FaSignOutAlt />}
-                >
-                  Logout
-                </Button>
+                <AuthButton onClick={handleLogout}>Logout</AuthButton>
               </div>
             ) : (
-              <div className="hidden md:flex items-center space-x-2">
-                <Link to="/login">
-                  <Button variant="outline" size="sm">
-                    Login
-                  </Button>
-                </Link>
-                <Link to="/register">
-                  <Button variant="primary" size="sm">
-                    Register
-                  </Button>
-                </Link>
+              <div className="px-2 space-y-4 flex flex-col">
+                <AuthButton to="/login" onClick={() => setIsMenuOpen(false)}>Login</AuthButton>
+                <AuthButton to="/register" onClick={() => setIsMenuOpen(false)}>Register</AuthButton>
               </div>
             )}
-            
-            {/* Mobile Menu Button */}
-            <button
-              onClick={toggleMenu}
-              className="md:hidden p-2 rounded-full text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={isMenuOpen}
-              aria-controls="mobile-menu"
-            >
-              {isMenuOpen ? <FaTimes className="h-5 w-5" /> : <FaBars className="h-5 w-5" />}
-            </button>
           </div>
         </div>
-        
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div id="mobile-menu" className="md:hidden mt-4 py-4 border-t border-gray-200 dark:border-gray-700">
-            <nav className="flex flex-col space-y-4">
-              <Link 
-                to="/" 
-                className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Home
-              </Link>
-              <Link 
-                to="/events" 
-                className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Events
-              </Link>
-              {isAuthenticated && user?.role === 'vendor' && (
-                <Link 
-                  to="/vendor/dashboard" 
-                  className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Vendor Dashboard
-                </Link>
-              )}
-              <Link 
-                to="/about" 
-                className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                About
-              </Link>
-              <Link 
-                to="/contact" 
-                className="text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Contact
-              </Link>
-              
-              {/* Auth Links for Mobile */}
-              {isAuthenticated ? (
-                <div className="flex flex-col space-y-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <Link 
-                    to="/profile" 
-                    className="flex items-center space-x-2 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <FaUser className="h-4 w-4" />
-                    <span>My Profile</span>
-                  </Link>
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
-                  >
-                    <FaSignOutAlt className="h-4 w-4" />
-                    <span>Logout</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col space-y-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <Link 
-                    to="/login" 
-                    className="w-full"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Button variant="outline" size="sm" fullWidth>
-                      Login
-                    </Button>
-                  </Link>
-                  <Link 
-                    to="/register" 
-                    className="w-full"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Button variant="primary" size="sm" fullWidth>
-                      Register
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </nav>
-          </div>
-        )}
-      </div>
+      )}
     </header>
   );
 };

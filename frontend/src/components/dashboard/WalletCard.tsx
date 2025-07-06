@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import paymentService, { WalletTransaction } from '../../services/payment.service';
-import PaymentForm from '../booking/PaymentForm';
+import paymentService, { WalletTransaction, PaymentVerificationRequest } from '../../services/payment.service';
+import RazorpayCheckout from '../booking/RazorpayCheckout';
 import { Wallet, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCcw } from 'lucide-react';
+import { formatCurrency } from '../../utils/formatters';
 
 const WalletCard: React.FC = () => {
   const { user, updateUser } = useAuth();
@@ -12,19 +13,14 @@ const WalletCard: React.FC = () => {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [paymentDetails, setPaymentDetails] = useState({
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
-    cardHolderName: '',
-  });
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   // Fetch wallet transactions
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const transactions = await paymentService.getWalletTransactions();
-        setTransactions(transactions);
+        const transactionData = await paymentService.getWalletTransactions();
+        setTransactions(transactionData.transactions);
       } catch (err: any) {
         console.error('Error fetching transactions:', err);
         setError('Failed to load transaction history');
@@ -34,74 +30,45 @@ const WalletCard: React.FC = () => {
     fetchTransactions();
   }, [walletBalance]);
 
-  // Handle payment details change
-  const handlePaymentDetailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setPaymentDetails(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
   // Handle top up
-  const handleTopUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleTopUp = async () => {
     setLoading(true);
     setError(null);
-
     try {
-      // Validate amount
       const amount = parseFloat(topUpAmount);
       if (isNaN(amount) || amount <= 0) {
         throw new Error('Please enter a valid amount');
       }
-
-      // Validate payment details
-      if (!paymentService.validateCardNumber(paymentDetails.cardNumber)) {
-        throw new Error('Invalid card number');
-      }
-
-      if (!paymentService.validateExpiryDate(paymentDetails.expiryDate)) {
-        throw new Error('Invalid expiry date');
-      }
-
-      if (!paymentDetails.cvv || !/^\d{3,4}$/.test(paymentDetails.cvv)) {
-        throw new Error('Invalid CVV');
-      }
-
-      if (!paymentDetails.cardHolderName.trim()) {
-        throw new Error('Cardholder name is required');
-      }
-
-      // Process top up
-      const result = await paymentService.topUpWallet({
-        amount,
-        paymentMethod: 'CREDIT_CARD',
-        paymentDetails,
-      });
-
-      // Update wallet balance
+      const order = await paymentService.createOrder(amount * 100);
+      setOrderId(order.id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to create order');
+      setLoading(false);
+    }
+  };
+  
+  const handlePaymentSuccess = async (paymentData: PaymentVerificationRequest) => {
+    try {
+      const result = await paymentService.topUpWallet(parseFloat(topUpAmount), paymentData);
       setWalletBalance(result.balance);
       if (updateUser) {
         updateUser({ walletBalance: result.balance });
       }
-
-      // Reset form
-      setTopUpAmount('');
-      setPaymentDetails({
-        cardNumber: '',
-        expiryDate: '',
-        cvv: '',
-        cardHolderName: '',
-      });
       setShowTopUp(false);
+      setTopUpAmount('');
+      setOrderId(null);
     } catch (err: any) {
-      console.error('Top up error:', err);
-      setError(err.message || 'Failed to process payment');
+      setError(err.message || 'Failed to top up wallet');
     } finally {
       setLoading(false);
     }
   };
+
+  const handlePaymentError = (err: any) => {
+    setError(err.message || 'Payment failed');
+    setLoading(false);
+  };
+
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -121,7 +88,7 @@ const WalletCard: React.FC = () => {
       
       <div className="mb-6">
         <div className="text-gray-600 text-sm mb-1">Current Balance</div>
-        <div className="text-3xl font-bold">${walletBalance.toFixed(2)}</div>
+        <div className="text-3xl font-bold">{formatCurrency(walletBalance)}</div>
       </div>
 
       {showTopUp && (
@@ -134,55 +101,48 @@ const WalletCard: React.FC = () => {
             </div>
           )}
           
-          <form onSubmit={handleTopUp}>
-            <div className="mb-4">
-              <label htmlFor="topUpAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount ($)
-              </label>
-              <input
-                type="number"
-                id="topUpAmount"
-                value={topUpAmount}
-                onChange={(e) => setTopUpAmount(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter amount"
-                min="1"
-                step="0.01"
-                required
-                disabled={loading}
-              />
+          {!orderId ? (
+            <div>
+              <div className="mb-4">
+                <label htmlFor="topUpAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount ($)
+                </label>
+                <input
+                  type="number"
+                  id="topUpAmount"
+                  value={topUpAmount}
+                  onChange={(e) => setTopUpAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter amount"
+                  min="1"
+                  step="0.01"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <button
+                  onClick={handleTopUp}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCcw size={16} className="mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Proceed to Payment'
+                  )}
+                </button>
             </div>
-            
-            <PaymentForm 
-              paymentDetails={paymentDetails}
-              onChange={handlePaymentDetailsChange}
+          ) : (
+            <RazorpayCheckout
+              amount={parseFloat(topUpAmount)}
+              orderId={orderId}
+              onSuccess={handlePaymentSuccess}
+              onError={handlePaymentError}
             />
-            
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowTopUp(false)}
-                className="text-gray-600 mr-2 px-4 py-2"
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <RefreshCcw size={16} className="mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  'Confirm Payment'
-                )}
-              </button>
-            </div>
-          </form>
+          )}
         </div>
       )}
 
@@ -209,7 +169,7 @@ const WalletCard: React.FC = () => {
                   </div>
                 </div>
                 <div className={`font-medium ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                  {transaction.type === 'credit' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                  {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
                 </div>
               </div>
             ))}

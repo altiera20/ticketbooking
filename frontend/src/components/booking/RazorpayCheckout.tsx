@@ -71,22 +71,36 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({
       return;
     }
 
+    // Get Razorpay key from environment variables
+    const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+    
+    console.log('Using Razorpay key ID:', razorpayKeyId ? `${razorpayKeyId.substring(0, 8)}...` : 'Not found');
+    
+    if (!razorpayKeyId) {
+      console.error('Razorpay key not found in environment variables');
+      onError(new Error('Payment configuration error. Please contact support.'));
+      return;
+    }
+
+    console.log('Creating Razorpay checkout with order ID:', orderId);
+    console.log('Amount:', amount);
+
     const options = {
-      key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+      key: razorpayKeyId,
       amount: amount * 100, // Razorpay expects amount in paise
       currency,
       name,
       description,
       order_id: orderId,
       prefill: {
-        name: user?.name || '',
+        name: user ? `${user.firstName} ${user.lastName}` : '',
         email: user?.email || '',
-        contact: user?.phone || '',
       },
       theme: {
         color: '#3399cc',
       },
       handler: function (response: any) {
+        console.log('Razorpay payment successful:', response);
         onSuccess({
           razorpayOrderId: response.razorpay_order_id,
           razorpayPaymentId: response.razorpay_payment_id,
@@ -95,15 +109,39 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({
       },
       modal: {
         ondismiss: function () {
+          console.log('Razorpay checkout modal dismissed');
           onError(new Error('Checkout closed without completing payment'));
         },
       },
     };
 
+    console.log('Razorpay options:', { 
+      ...options, 
+      key: options.key ? `${options.key.substring(0, 8)}...` : 'Not found',
+      order_id: options.order_id
+    });
+
     try {
+      // Check if we're using a mock order ID (for testing/development)
+      if (orderId.includes('mock')) {
+        console.warn('Using mock order ID. In production, this would fail.');
+        // For testing purposes, simulate a successful payment
+        setTimeout(() => {
+          console.log('Simulating successful payment with mock order');
+          onSuccess({
+            razorpayOrderId: orderId,
+            razorpayPaymentId: `pay_mock_${Date.now()}`,
+            razorpaySignature: 'mock_signature',
+          });
+        }, 2000);
+        return;
+      }
+
       const razorpay = new window.Razorpay(options);
+      console.log('Razorpay instance created, opening checkout...');
       razorpay.open();
     } catch (error) {
+      console.error('Error opening Razorpay checkout:', error);
       onError(error);
     }
   };

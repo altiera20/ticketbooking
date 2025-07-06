@@ -176,3 +176,113 @@ CREATE TABLE "wallet_transactions" (
    - Success: 4111 1111 1111 1111
    - Authentication Required: 4120 0000 0000 0007
    - Failure: 5104 0600 0000 0008 
+
+# Razorpay Payment Implementation
+
+This document outlines how Razorpay payment processing is implemented in the Universal Ticket Booking application.
+
+## Overview
+
+The application uses Razorpay for payment processing, which provides a secure and reliable way to handle online payments. The implementation follows Razorpay's recommended integration pattern using order creation, client-side checkout, and server-side verification.
+
+## Environment Variables
+
+The following environment variables need to be set for Razorpay to work properly:
+
+```
+# Backend (.env)
+RAZORPAY_KEY_ID=your-razorpay-key-id
+RAZORPAY_KEY_SECRET=your-razorpay-key-secret
+RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
+
+# Frontend (.env)
+REACT_APP_RAZORPAY_KEY_ID=your-razorpay-key-id
+```
+
+## Backend Implementation
+
+### Payment Service (`payment.service.ts`)
+
+The payment service handles all Razorpay-related operations:
+
+1. **Order Creation**: Creates a payment order in Razorpay that can be used by the frontend to initiate the payment process.
+2. **Payment Processing**: Processes payments after they are completed on the frontend.
+3. **Payment Verification**: Verifies the payment signature to ensure the payment is legitimate.
+4. **Refund Processing**: Handles refunds when a booking is canceled.
+5. **Webhook Handling**: Processes Razorpay webhook events for payment status updates.
+
+### Payment Controller (`payment.controller.ts`)
+
+The payment controller exposes REST API endpoints for:
+
+1. **Creating Payment Orders**: `POST /api/payments/order`
+2. **Verifying Payments**: `POST /api/payments/verify`
+3. **Handling Webhooks**: `POST /api/payments/webhook`
+4. **Managing Wallet**: `POST /api/payments/wallet/topup`, `GET /api/payments/wallet/balance`, etc.
+
+## Frontend Implementation
+
+### RazorpayCheckout Component (`RazorpayCheckout.tsx`)
+
+This component handles the client-side integration with Razorpay:
+
+1. **Loading the Razorpay Script**: Dynamically loads the Razorpay checkout script.
+2. **Initializing Checkout**: Opens the Razorpay checkout modal with the order details.
+3. **Handling Callbacks**: Processes success and error callbacks from the Razorpay checkout.
+
+### Payment Service (`payment.service.ts`)
+
+The frontend payment service provides methods to:
+
+1. **Create Orders**: Calls the backend API to create a payment order.
+2. **Verify Payments**: Verifies the payment after completion.
+3. **Process Payments**: Handles the complete payment flow.
+4. **Manage Wallet**: Provides methods for wallet top-up and checking balance.
+
+## Payment Flow
+
+1. **Order Creation**:
+   - The frontend requests a payment order from the backend.
+   - The backend creates an order in Razorpay and returns the order ID.
+
+2. **Payment Initiation**:
+   - The frontend initializes the Razorpay checkout with the order ID.
+   - The user completes the payment in the Razorpay checkout modal.
+
+3. **Payment Verification**:
+   - After successful payment, Razorpay provides a payment ID and signature.
+   - The frontend sends these details to the backend for verification.
+   - The backend verifies the signature to ensure the payment is legitimate.
+
+4. **Booking Confirmation**:
+   - If the payment is verified, the booking is confirmed.
+   - The user receives a confirmation email with booking details.
+
+5. **Webhook Processing**:
+   - Razorpay sends webhook events for payment status updates.
+   - The backend processes these events to update payment and booking status.
+
+## Testing
+
+The implementation includes unit tests for the payment service and integration tests for the booking flow with Razorpay payments. The tests use mocked Razorpay responses to simulate the payment flow without making actual API calls to Razorpay.
+
+## Error Handling
+
+The implementation includes comprehensive error handling for:
+
+1. **Payment Failures**: When a payment fails, the booking is not confirmed and the seats are released.
+2. **Verification Failures**: If the payment signature verification fails, the payment is considered invalid.
+3. **Network Issues**: Timeouts and network errors are handled gracefully.
+
+## Security Considerations
+
+1. **Signature Verification**: All payments are verified using cryptographic signatures.
+2. **Webhook Authentication**: Webhooks are authenticated using the webhook secret.
+3. **Environment Variables**: Sensitive keys are stored in environment variables, not in the code.
+
+## Future Improvements
+
+1. **Payment Analytics**: Implement analytics to track payment success rates and failures.
+2. **Multiple Payment Methods**: Add support for UPI, net banking, and other payment methods.
+3. **Subscription Support**: Add support for recurring payments and subscriptions.
+4. **International Payments**: Add support for multiple currencies and international payments. 

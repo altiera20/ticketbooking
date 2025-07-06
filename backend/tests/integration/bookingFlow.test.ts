@@ -12,10 +12,44 @@ import { PaymentMethod } from '../../src/types/common.types';
 import { BookingStatus } from '../../src/types/common.types';
 import { sign } from 'jsonwebtoken';
 import app from '../../src/app';
-import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { jest, describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
-// Check if we're running in a mock environment
-const isMockEnvironment = process.env.NODE_ENV === 'test' && !process.env.RAZORPAY_KEY_ID;
+// Mock Razorpay for testing
+jest.mock('razorpay', () => {
+  return jest.fn().mockImplementation(() => {
+    return {
+      orders: {
+        create: jest.fn().mockResolvedValue({ 
+          id: 'order_test123',
+          amount: 10000,
+          currency: 'INR',
+          receipt: 'receipt_test123',
+          status: 'created'
+        })
+      },
+      payments: {
+        refund: jest.fn().mockResolvedValue({ 
+          id: 'ref_test123',
+          payment_id: 'pay_test123',
+          amount: 10000,
+          status: 'processed'
+        })
+      }
+    };
+  });
+});
+
+// Mock crypto for signature verification
+jest.mock('crypto', () => {
+  const originalModule = jest.requireActual('crypto');
+  return {
+    ...originalModule,
+    createHmac: jest.fn().mockReturnValue({
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue('valid_signature')
+    })
+  };
+});
 
 describe('Booking Flow Integration Tests', () => {
   let testUsers: User[] = [];
@@ -33,7 +67,7 @@ describe('Booking Flow Integration Tests', () => {
 
     // Create auth tokens
     testUsers.forEach(user => {
-      authTokens[user.id] = sign({ id: user.id }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '1h' });
+      authTokens[user.id] = sign({ id: user.id }, process.env.JWT_ACCESS_SECRET || 'test-secret', { expiresIn: '1h' });
     });
 
     // Create test event
@@ -46,15 +80,21 @@ describe('Booking Flow Integration Tests', () => {
     testSeats = await createTestSeats(testEvent.id, 20);
   });
 
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.clearAllMocks();
+    
+    // Mock the verification in the service
+    jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
+      .mockReturnValue(true);
+  });
+
   afterAll(async () => {
     await cleanupTestData(testUsers, testEvent, testSeats, testBookings);
   });
 
   describe('End-to-End Booking Flow', () => {
-    // Skip tests that require Razorpay in mock environment
-    const testFn = isMockEnvironment ? it.skip : it;
-    
-    testFn('should successfully complete the booking flow', async () => {
+    it('should successfully complete the booking flow with Razorpay', async () => {
       const user = testUsers[0];
       const token = authTokens[user.id];
       const selectedSeats = testSeats.slice(0, 2); // Select first 2 seats
@@ -72,8 +112,23 @@ describe('Booking Flow Integration Tests', () => {
       expect(reserveResponse.body.success).toBe(true);
       expect(reserveResponse.body.data).toHaveLength(2);
       
-      // Step 2: Create booking with payment
-      // For testing, we'll mock the Razorpay payment verification
+      // Step 2: Create a payment order
+      const orderResponse = await supertest(app)
+        .post('/api/payments/order')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          amount: 100,
+          currency: 'INR',
+          receipt: `receipt_${Date.now()}`
+        });
+      
+      expect(orderResponse.status).toBe(200);
+      expect(orderResponse.body.success).toBe(true);
+      expect(orderResponse.body.data).toHaveProperty('id');
+      
+      const orderId = orderResponse.body.data.id;
+      
+      // Step 3: Create booking with payment
       const bookingResponse = await supertest(app)
         .post('/api/bookings')
         .set('Authorization', `Bearer ${token}`)
@@ -82,15 +137,11 @@ describe('Booking Flow Integration Tests', () => {
           seatIds: selectedSeats.map(seat => seat.id),
           paymentMethod: PaymentMethod.CREDIT_CARD,
           paymentDetails: {
-            razorpayOrderId: 'order_test123',
+            razorpayOrderId: orderId,
             razorpayPaymentId: 'pay_test123',
             razorpaySignature: 'valid_signature'
           }
         });
-      
-      // Mock the verification in the service
-      jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
-        .mockReturnValue(true);
       
       expect(bookingResponse.status).toBe(201);
       expect(bookingResponse.body.success).toBe(true);
@@ -104,14 +155,74 @@ describe('Booking Flow Integration Tests', () => {
       if (booking) {
         testBookings.push(booking);
       }
+      
+      // Step 4: Verify payment
+      const verifyResponse = await supertest(app)
+        .post('/api/payments/verify')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: 'pay_test123',
+          razorpay_signature: 'valid_signature'
+        });
+      
+      expect(verifyResponse.status).toBe(200);
+      expect(verifyResponse.body.success).toBe(true);
+    });
+    
+    it('should handle payment verification failure', async () => {
+      const user = testUsers[0];
+      const token = authTokens[user.id];
+      const selectedSeats = testSeats.slice(2, 4); // Select next 2 seats
+      
+      // Mock the verification to fail
+      jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
+        .mockReturnValue(false);
+      
+      // Step 1: Reserve seats temporarily
+      await supertest(app)
+        .post('/api/bookings/reserve-seats')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          eventId: testEvent.id,
+          seatIds: selectedSeats.map(seat => seat.id)
+        });
+      
+      // Step 2: Create a payment order
+      const orderResponse = await supertest(app)
+        .post('/api/payments/order')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          amount: 100,
+          currency: 'INR'
+        });
+      
+      const orderId = orderResponse.body.data.id;
+      
+      // Step 3: Create booking with invalid payment signature
+      const bookingResponse = await supertest(app)
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          eventId: testEvent.id,
+          seatIds: selectedSeats.map(seat => seat.id),
+          paymentMethod: PaymentMethod.CREDIT_CARD,
+          paymentDetails: {
+            razorpayOrderId: orderId,
+            razorpayPaymentId: 'pay_test123',
+            razorpaySignature: 'invalid_signature'
+          }
+        });
+      
+      // Should fail due to invalid signature
+      expect(bookingResponse.status).toBe(400);
+      expect(bookingResponse.body.success).toBe(false);
+      expect(bookingResponse.body.error).toBeTruthy();
     });
   });
 
   describe('Concurrent Booking Scenarios', () => {
-    // Skip tests that require Razorpay in mock environment
-    const testFn = isMockEnvironment ? it.skip : it;
-    
-    testFn('should handle concurrent booking attempts for the same seats', async () => {
+    it('should handle concurrent booking attempts for the same seats', async () => {
       const user1 = testUsers[0];
       const user2 = testUsers[1];
       const token1 = authTokens[user1.id];
@@ -120,6 +231,17 @@ describe('Booking Flow Integration Tests', () => {
       // Select seats that haven't been booked yet
       const availableSeats = testSeats.filter(seat => !seat.bookingId);
       const selectedSeats = availableSeats.slice(0, 2);
+      
+      // Create payment orders for both users
+      const orderResponse1 = await supertest(app)
+        .post('/api/payments/order')
+        .set('Authorization', `Bearer ${token1}`)
+        .send({
+          amount: 100,
+          currency: 'INR'
+        });
+      
+      const orderId1 = orderResponse1.body.data.id;
       
       // Prepare concurrent requests
       const requests = [
@@ -132,7 +254,7 @@ describe('Booking Flow Integration Tests', () => {
             seatIds: selectedSeats.map(seat => seat.id),
             paymentMethod: PaymentMethod.CREDIT_CARD,
             paymentDetails: {
-              razorpayOrderId: 'order_test123',
+              razorpayOrderId: orderId1,
               razorpayPaymentId: 'pay_test123',
               razorpaySignature: 'valid_signature'
             }
@@ -150,10 +272,6 @@ describe('Booking Flow Integration Tests', () => {
           }
         }
       ];
-      
-      // Mock the verification in the service
-      jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
-        .mockReturnValue(true);
       
       // Execute concurrent requests
       const responses = await executeConcurrentRequests(app, requests);
@@ -177,7 +295,7 @@ describe('Booking Flow Integration Tests', () => {
       }
     });
 
-    testFn('should release seats after reservation timeout', async () => {
+    it('should release seats after reservation timeout', async () => {
       const user = testUsers[0];
       const token = authTokens[user.id];
       
@@ -216,7 +334,18 @@ describe('Booking Flow Integration Tests', () => {
       expect(reserveResponse2.status).toBe(200);
       expect(reserveResponse2.body.success).toBe(true);
       
-      // Step 4: Complete the booking
+      // Step 4: Create payment order
+      const orderResponse = await supertest(app)
+        .post('/api/payments/order')
+        .set('Authorization', `Bearer ${token2}`)
+        .send({
+          amount: 100,
+          currency: 'INR'
+        });
+      
+      const orderId = orderResponse.body.data.id;
+      
+      // Step 5: Complete the booking
       const bookingResponse = await supertest(app)
         .post('/api/bookings')
         .set('Authorization', `Bearer ${token2}`)
@@ -225,15 +354,11 @@ describe('Booking Flow Integration Tests', () => {
           seatIds: selectedSeats.map(seat => seat.id),
           paymentMethod: PaymentMethod.CREDIT_CARD,
           paymentDetails: {
-            razorpayOrderId: 'order_test123',
+            razorpayOrderId: orderId,
             razorpayPaymentId: 'pay_test123',
             razorpaySignature: 'valid_signature'
           }
         });
-      
-      // Mock the verification in the service
-      jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
-        .mockReturnValue(true);
       
       expect(bookingResponse.status).toBe(201);
       expect(bookingResponse.body.success).toBe(true);
@@ -248,17 +373,21 @@ describe('Booking Flow Integration Tests', () => {
     });
   });
   
-  describe('Payment Failure Scenario', () => {
-    it('should release seats when payment fails', async () => {
+  describe('Wallet Payment Flow', () => {
+    it('should successfully complete booking with wallet payment', async () => {
       const user = testUsers[0];
       const token = authTokens[user.id];
+      
+      // Add funds to user's wallet
+      const userRepo = AppDataSource.getRepository(User);
+      await userRepo.update(user.id, { walletBalance: 500 });
       
       // Select seats that haven't been booked yet
       const availableSeats = testSeats.filter(seat => !seat.bookingId);
       const selectedSeats = availableSeats.slice(0, 2);
       
-      // Step 1: Reserve seats temporarily
-      const reserveResponse = await supertest(app)
+      // Step 1: Reserve seats
+      await supertest(app)
         .post('/api/bookings/reserve-seats')
         .set('Authorization', `Bearer ${token}`)
         .send({
@@ -266,42 +395,68 @@ describe('Booking Flow Integration Tests', () => {
           seatIds: selectedSeats.map(seat => seat.id)
         });
       
-      expect(reserveResponse.status).toBe(200);
-      expect(reserveResponse.body.success).toBe(true);
-      
-      // Step 2: Attempt booking with invalid payment details
-      // Mock the verification in the service to return false
-      jest.spyOn(require('../../src/services/payment.service').PaymentService.prototype, 'verifyPaymentSignature')
-        .mockReturnValue(false);
-      
+      // Step 2: Create booking with wallet payment
       const bookingResponse = await supertest(app)
         .post('/api/bookings')
         .set('Authorization', `Bearer ${token}`)
         .send({
           eventId: testEvent.id,
           seatIds: selectedSeats.map(seat => seat.id),
-          paymentMethod: PaymentMethod.CREDIT_CARD,
-          paymentDetails: {
-            razorpayOrderId: 'order_test123',
-            razorpayPaymentId: 'pay_test123',
-            razorpaySignature: 'invalid_signature'
-          }
+          paymentMethod: PaymentMethod.WALLET
         });
       
-      // Payment should fail
+      expect(bookingResponse.status).toBe(201);
+      expect(bookingResponse.body.success).toBe(true);
+      expect(bookingResponse.body.data.status).toBe(BookingStatus.CONFIRMED);
+      
+      // Store booking for cleanup
+      const bookingId = bookingResponse.body.data.id;
+      const bookingRepo = AppDataSource.getRepository(Booking);
+      const booking = await bookingRepo.findOne({ where: { id: bookingId } });
+      if (booking) {
+        testBookings.push(booking);
+      }
+      
+      // Verify wallet balance was deducted
+      const updatedUser = await userRepo.findOne({ where: { id: user.id } });
+      expect(updatedUser?.walletBalance).toBeLessThan(500);
+    });
+    
+    it('should handle insufficient wallet balance', async () => {
+      const user = testUsers[1];
+      const token = authTokens[user.id];
+      
+      // Set user's wallet balance to a low amount
+      const userRepo = AppDataSource.getRepository(User);
+      await userRepo.update(user.id, { walletBalance: 1 });
+      
+      // Select seats that haven't been booked yet
+      const availableSeats = testSeats.filter(seat => !seat.bookingId);
+      const selectedSeats = availableSeats.slice(0, 2);
+      
+      // Step 1: Reserve seats
+      await supertest(app)
+        .post('/api/bookings/reserve-seats')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          eventId: testEvent.id,
+          seatIds: selectedSeats.map(seat => seat.id)
+        });
+      
+      // Step 2: Attempt booking with insufficient wallet balance
+      const bookingResponse = await supertest(app)
+        .post('/api/bookings')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          eventId: testEvent.id,
+          seatIds: selectedSeats.map(seat => seat.id),
+          paymentMethod: PaymentMethod.WALLET
+        });
+      
+      // Should fail due to insufficient balance
       expect(bookingResponse.status).toBe(400);
       expect(bookingResponse.body.success).toBe(false);
-      
-      // Step 3: Verify seats are released
-      await delay(500); // Wait a bit for async operations
-      
-      // Check that seats are available again
-      for (const seat of selectedSeats) {
-        const seatRepo = AppDataSource.getRepository(Seat);
-        const updatedSeat = await seatRepo.findOne({ where: { id: seat.id } });
-        expect(updatedSeat?.bookingId).toBeNull();
-        expect(updatedSeat?.status).toBe('available');
-      }
+      expect(bookingResponse.body.error).toContain('Insufficient wallet balance');
     });
   });
 }); 

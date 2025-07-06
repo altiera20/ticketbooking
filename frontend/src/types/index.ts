@@ -1,16 +1,16 @@
-import { ReactNode } from 'react';
+import { ReactNode, MouseEvent } from 'react';
 
 // Common Types
-export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'error' | 'warning' | 'outline' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'error' | 'warning' | 'outline' | 'ghost' | 'link' | 'danger';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 export type InputVariant = 'default' | 'outlined' | 'filled';
 export type InputSize = 'sm' | 'md' | 'lg';
 
 // User Types
 export enum UserRole {
-  USER = 'user',
-  VENDOR = 'vendor',
-  ADMIN = 'admin',
+  USER = 'USER',
+  VENDOR = 'VENDOR',
+  ADMIN = 'ADMIN'
 }
 
 export interface User {
@@ -19,12 +19,13 @@ export interface User {
   lastName: string;
   email: string;
   role: UserRole;
-  walletBalance: number;
+  walletBalance?: number;
+  isEmailVerified?: boolean;
+  isActive?: boolean;
   profilePicture?: string;
   phone?: string;
-  isEmailVerified: boolean;
-  isActive: boolean;
-  vendorProfile?: VendorProfile;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface VendorProfile {
@@ -77,29 +78,29 @@ export enum EventStatus {
 
 export interface Event {
   id: string;
-  vendorId: string;
   title: string;
   description: string;
-  type: EventType;
-  venue: string;
   eventDate: string;
+  venue: string;
+  type: string;
   price: number;
   totalSeats: number;
   availableSeats: number;
-  status: EventStatus;
-  seats?: Seat[];
-  createdAt: string;
-  updatedAt: string;
+  imageUrl?: string;
+  vendorId?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Seat {
   id: string;
-  eventId: string;
   seatNumber: string;
   row: string;
   section: string;
+  price: number;
   status: 'available' | 'reserved' | 'booked';
-  bookingId?: string;
+  eventId: string;
 }
 
 export interface EventFilters {
@@ -126,7 +127,7 @@ export interface ButtonProps {
   loading?: boolean;
   leftIcon?: ReactNode;
   rightIcon?: ReactNode;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   ariaLabel?: string;
 }
@@ -191,4 +192,61 @@ export interface AuthLayoutProps {
   children: ReactNode;
   title: string;
   subtitle?: string;
+}
+
+// Booking related types
+export enum BookingStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED'
+}
+
+export interface Booking {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: BookingStatus;
+  quantity: number;
+  totalAmount: number;
+  bookingDate: string;
+  referenceNumber: string;
+  seats: Seat[];
+  payment?: Payment;
+  event?: Event;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Payment related types
+export enum PaymentMethod {
+  CREDIT_CARD = 'CREDIT_CARD',
+  WALLET = 'WALLET'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED'
+}
+
+export interface Payment {
+  id: string;
+  amount: number;
+  status: PaymentStatus;
+  method: PaymentMethod;
+  transactionId?: string;
+  bookingId?: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// API response types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
 } 

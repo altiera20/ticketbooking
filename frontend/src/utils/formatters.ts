@@ -1,11 +1,11 @@
 /**
  * Format a number as currency
  * @param amount - The amount to format
- * @param currency - The currency code (default: USD)
+ * @param currency - The currency code (default: INR)
  * @returns Formatted currency string
  */
-export const formatCurrency = (amount: number, currency = 'USD'): string => {
-  return new Intl.NumberFormat('en-US', {
+export const formatCurrency = (amount: number, currency = 'INR'): string => {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -19,17 +19,30 @@ export const formatCurrency = (amount: number, currency = 'USD'): string => {
  * @returns Formatted date string
  */
 export const formatDate = (dateString: string, options?: Intl.DateTimeFormatOptions): string => {
-  const date = new Date(dateString);
-  const defaultOptions: Intl.DateTimeFormatOptions = {
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  };
-  
-  return new Intl.DateTimeFormat('en-US', options || defaultOptions).format(date);
+  try {
+    if (!dateString) return 'N/A';
+    
+    const date = new Date(dateString);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    
+    const defaultOptions: Intl.DateTimeFormatOptions = {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    };
+    
+    return new Intl.DateTimeFormat('en-US', options || defaultOptions).format(date);
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return 'Invalid date';
+  }
 };
 
 /**

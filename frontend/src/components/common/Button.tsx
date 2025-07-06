@@ -38,6 +38,8 @@ export const Button: React.FC<ButtonProps> = ({
     warning: 'bg-warning-600 text-white hover:bg-warning-700 focus:ring-warning-500 disabled:bg-warning-300',
     outline: 'border border-gray-300 bg-transparent text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:ring-gray-500',
     ghost: 'bg-transparent text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:ring-gray-500',
+    link: 'bg-transparent text-primary-600 hover:underline focus:ring-primary-500',
+    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-red-300'
   };
   
   // Width style
@@ -62,7 +64,7 @@ export const Button: React.FC<ButtonProps> = ({
       className={buttonStyles}
       onClick={onClick}
       disabled={disabled || loading}
-      aria-label={ariaLabel || typeof children === 'string' ? children.toString() : undefined}
+      aria-label={ariaLabel || (typeof children === 'string' ? children : undefined)}
       aria-busy={loading}
     >
       {loading && (

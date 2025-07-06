@@ -165,7 +165,6 @@ const ResetPassword: React.FC = () => {
           <div className="relative">
             <Input
               id="password"
-              name="password"
               type={showPassword ? 'text' : 'password'}
               label="New password"
               placeholder="••••••••"
@@ -190,7 +189,6 @@ const ResetPassword: React.FC = () => {
           <div className="relative">
             <Input
               id="confirmPassword"
-              name="confirmPassword"
               type={showConfirmPassword ? 'text' : 'password'}
               label="Confirm password"
               placeholder="••••••••"

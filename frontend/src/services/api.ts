@@ -1,111 +1,62 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios from 'axios';
 
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+const api = axios.create({
+  baseURL: 'http://localhost:3000/api',
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-class ApiService {
-  private api: AxiosInstance;
-  private token: string | null = null;
-
-  constructor() {
-    const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    // Check for both possible token keys
+    const token = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
     
-    this.api = axios.create({
-      baseURL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    // Debug token
+    console.log('Auth token being used:', token ? token.substring(0, 10) + '...' : 'No token found');
+    
+    if (token) {
+      // Ensure headers object exists
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-    // Add request interceptor to include auth token
-    this.api.interceptors.request.use(
-      (config) => {
-        if (this.token) {
-          config.headers['Authorization'] = `Bearer ${this.token}`;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    // Add response interceptor for error handling
-    this.api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        // Handle session expiry
-        if (error.response && error.response.status === 401) {
-          // Clear token and redirect to login
-          this.setToken(null);
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login';
-          }
-        }
-        return Promise.reject(error);
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('API Error:', error.response.data);
+      
+      // Handle authentication errors
+      if (error.response.status === 401) {
+        console.error('Authentication error detected');
+        // Optionally clear tokens on auth error
+        // localStorage.removeItem('authToken');
+        // localStorage.removeItem('accessToken');
       }
-    );
-
-    // Initialize token from localStorage
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('auth_token');
-      if (storedToken) {
-        this.setToken(storedToken);
-      }
+      
+      return Promise.reject(error.response.data);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('Network Error:', error.request);
+      return Promise.reject(new Error('Network error occurred'));
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Request Error:', error.message);
+      return Promise.reject(error);
     }
   }
+);
 
-  /**
-   * Set the authentication token
-   */
-  setToken(token: string | null): void {
-    this.token = token;
-    if (typeof window !== 'undefined') {
-      if (token) {
-        localStorage.setItem('auth_token', token);
-      } else {
-        localStorage.removeItem('auth_token');
-      }
-    }
-  }
-
-  /**
-   * GET request
-   */
-  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<ApiResponse<T>>> {
-    return this.api.get<ApiResponse<T>>(url, config);
-  }
-
-  /**
-   * POST request
-   */
-  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<ApiResponse<T>>> {
-    return this.api.post<ApiResponse<T>>(url, data, config);
-  }
-
-  /**
-   * PUT request
-   */
-  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<ApiResponse<T>>> {
-    return this.api.put<ApiResponse<T>>(url, data, config);
-  }
-
-  /**
-   * PATCH request
-   */
-  async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<ApiResponse<T>>> {
-    return this.api.patch<ApiResponse<T>>(url, data, config);
-  }
-
-  /**
-   * DELETE request
-   */
-  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<ApiResponse<T>>> {
-    return this.api.delete<ApiResponse<T>>(url, config);
-  }
-}
-
-const apiService = new ApiService();
-export default apiService;
+export default api;

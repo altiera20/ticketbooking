@@ -1,273 +1,143 @@
 import React, { useState, useEffect } from 'react';
-import { EventFiltersProps, EventType } from '../../types';
-import { FaFilter, FaCalendarAlt, FaMoneyBillWave, FaMapMarkerAlt, FaSearch, FaTimes } from 'react-icons/fa';
-import Button from '../common/Button';
-import Input from '../common/Input';
+import { EventFiltersProps } from '../../types';
+import { FaFilter, FaCalendarAlt, FaMoneyBillWave, FaMapMarkerAlt, FaSearch, FaTimes, FaSortAmountDown, FaSortAmountUp, FaTags } from 'react-icons/fa';
 
-export const EventFilters: React.FC<EventFiltersProps> = ({
-  filters,
-  onFilterChange,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
+const FilterInput: React.FC<{ id: string; type: string; placeholder: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; icon: React.ReactNode }> = ({ id, type, placeholder, value, onChange, icon }) => (
+  <div className="relative w-full">
+    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-pink">{icon}</span>
+    <input
+      id={id}
+      type={type}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      className="w-full bg-dark-bg/50 text-light-text placeholder-light-text/50 font-body text-fluid-base pl-12 pr-4 py-3 border-2 border-vibrant-purple rounded-lg focus:ring-2 focus:ring-neon-pink focus:border-neon-pink transition-all duration-300 shadow-inner-neon"
+    />
+  </div>
+);
+
+const FilterSelect: React.FC<{ id: string; value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; icon: React.ReactNode }> = ({ id, value, onChange, children, icon }) => (
+  <div className="relative w-full">
+    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-pink">{icon}</span>
+    <select
+      id={id}
+      value={value}
+      onChange={onChange}
+      className="w-full appearance-none bg-dark-bg/50 text-light-text font-body text-fluid-base pl-12 pr-10 py-3 border-2 border-vibrant-purple rounded-lg focus:ring-2 focus:ring-neon-pink focus:border-neon-pink transition-all duration-300 shadow-inner-neon"
+    >
+      {children}
+    </select>
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-light-text">
+      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5.516 7.548c.436-.446 1.144-.446 1.58 0L10 10.405l2.904-2.857c.436-.446 1.144-.446 1.58 0 .436.446.436 1.167 0 1.613l-3.72 3.667a1.12 1.12 0 0 1-1.58 0L5.516 9.16c-.436-.446-.436-1.167 0-1.613z"/></svg>
+    </div>
+  </div>
+);
+
+const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; variant?: 'primary' | 'secondary' }> = ({ onClick, children, variant = 'primary' }) => {
+  const baseClasses = "font-heading text-fluid-base px-6 py-3 rounded-md shadow-3d font-bold border-2 transform transition-all duration-300 hover:scale-105 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2";
+  const variantClasses = variant === 'primary'
+    ? "bg-gradient-to-br from-neon-green to-electric-blue text-dark-text border-light-text"
+    : "bg-transparent border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-dark-bg";
+  return <button onClick={onClick} className={`${baseClasses} ${variantClasses}`}>{children}</button>;
+};
+
+export const EventFilters: React.FC<EventFiltersProps> = ({ filters, onFilterChange }) => {
   const [localFilters, setLocalFilters] = useState(filters);
   const [priceRange, setPriceRange] = useState({
     min: filters.minPrice?.toString() || '',
     max: filters.maxPrice?.toString() || '',
   });
-  
-  // Update local filters when props change
+
   useEffect(() => {
     setLocalFilters(filters);
-    setPriceRange({
-      min: filters.minPrice?.toString() || '',
-      max: filters.maxPrice?.toString() || '',
-    });
+    setPriceRange({ min: filters.minPrice?.toString() || '', max: filters.maxPrice?.toString() || '' });
   }, [filters]);
-  
-  // Toggle mobile filters visibility
-  const toggleFilters = () => {
-    setIsOpen(!isOpen);
-  };
-  
-  // Handle filter changes
+
   const handleFilterChange = (key: keyof typeof localFilters, value: any) => {
-    const updatedFilters = { ...localFilters, [key]: value };
-    setLocalFilters(updatedFilters);
+    setLocalFilters({ ...localFilters, [key]: value });
   };
-  
-  // Handle price range changes
+
   const handlePriceChange = (type: 'min' | 'max', value: string) => {
     setPriceRange({ ...priceRange, [type]: value });
   };
-  
-  // Apply filters
+
   const applyFilters = () => {
     const updatedFilters = { ...localFilters };
-    
-    // Parse price values
-    if (priceRange.min) {
-      updatedFilters.minPrice = parseFloat(priceRange.min);
-    } else {
-      delete updatedFilters.minPrice;
-    }
-    
-    if (priceRange.max) {
-      updatedFilters.maxPrice = parseFloat(priceRange.max);
-    } else {
-      delete updatedFilters.maxPrice;
-    }
-    
+    if (priceRange.min) updatedFilters.minPrice = parseFloat(priceRange.min); else delete updatedFilters.minPrice;
+    if (priceRange.max) updatedFilters.maxPrice = parseFloat(priceRange.max); else delete updatedFilters.maxPrice;
     onFilterChange(updatedFilters);
-    
-    // Close mobile filters
-    if (isOpen) {
-      setIsOpen(false);
-    }
   };
-  
-  // Reset all filters
+
   const resetFilters = () => {
-    const resetValues = {
+    const newFilters = {
+      limit: filters.limit,
+      page: 1,
+      sortBy: 'date' as const,
+      sortOrder: 'asc' as const,
+      search: undefined,
       type: undefined,
-      minPrice: undefined,
-      maxPrice: undefined,
       date: undefined,
       venue: undefined,
-      search: undefined,
-      sortBy: 'date',
-      sortOrder: 'asc',
+      minPrice: undefined,
+      maxPrice: undefined,
     };
-    
-    setLocalFilters(resetValues);
+    setLocalFilters(newFilters);
     setPriceRange({ min: '', max: '' });
-    onFilterChange(resetValues);
+    onFilterChange(newFilters);
   };
-  
-  // Check if any filters are applied
+
   const hasActiveFilters = () => {
-    return (
-      localFilters.type !== undefined ||
-      localFilters.minPrice !== undefined ||
-      localFilters.maxPrice !== undefined ||
-      localFilters.date !== undefined ||
-      localFilters.venue !== undefined ||
-      localFilters.search !== undefined
-    );
+    const { sortBy, sortOrder, ...activeFilters } = filters;
+    return Object.values(activeFilters).some(value => value !== undefined && value !== '');
   };
-  
+
   return (
-    <div className="bg-white dark:bg-dark-700 rounded-lg shadow-sm mb-6 transition-colors duration-300">
-      {/* Mobile Filter Toggle */}
-      <div className="md:hidden p-4 flex justify-between items-center">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={toggleFilters}
-          leftIcon={<FaFilter />}
-        >
-          Filters
-        </Button>
+    <div className="font-body text-light-text">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+        <FilterInput id="search" type="text" placeholder="Search by keyword..." value={localFilters.search || ''} onChange={(e) => handleFilterChange('search', e.target.value)} icon={<FaSearch />} />
+        <FilterSelect id="type" value={localFilters.type || ''} onChange={(e) => handleFilterChange('type', e.target.value || undefined)} icon={<FaTags />}>
+          <option value="">All Types</option>
+          <option value="movie">Movie</option>
+          <option value="concert">Concert</option>
+          <option value="travel">Travel</option>
+        </FilterSelect>
+        <FilterInput id="date" type="date" placeholder="Select Date" value={localFilters.date || ''} onChange={(e) => handleFilterChange('date', e.target.value || undefined)} icon={<FaCalendarAlt />} />
+        <FilterInput id="venue" type="text" placeholder="Venue name..." value={localFilters.venue || ''} onChange={(e) => handleFilterChange('venue', e.target.value || undefined)} icon={<FaMapMarkerAlt />} />
         
-        {hasActiveFilters() && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={resetFilters}
-          >
-            Clear All
-          </Button>
-        )}
-      </div>
-      
-      {/* Desktop Filters */}
-      <div className={`${isOpen ? 'block' : 'hidden'} md:block p-4 border-t md:border-t-0 border-gray-200 dark:border-gray-700`}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {/* Search */}
-          <div>
-            <Input
-              id="search"
-              name="search"
-              type="text"
-              label="Search"
-              placeholder="Search events..."
-              leftIcon={<FaSearch />}
-              value={localFilters.search || ''}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-            />
-          </div>
-          
-          {/* Event Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Event Type
-            </label>
-            <select
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-              value={localFilters.type || ''}
-              onChange={(e) => handleFilterChange('type', e.target.value ? e.target.value : undefined)}
-            >
-              <option value="">All Types</option>
-              <option value={EventType.MOVIE}>Movies</option>
-              <option value={EventType.CONCERT}>Concerts</option>
-              <option value={EventType.TRAIN}>Train Tickets</option>
-            </select>
-          </div>
-          
-          {/* Date */}
-          <div>
-            <Input
-              id="date"
-              name="date"
-              type="date"
-              label="Date"
-              leftIcon={<FaCalendarAlt />}
-              value={localFilters.date || ''}
-              onChange={(e) => handleFilterChange('date', e.target.value || undefined)}
-            />
-          </div>
-          
-          {/* Price Range */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Price Range
-            </label>
-            <div className="flex items-center space-x-2">
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaMoneyBillWave className="text-gray-400" />
-                </div>
-                <input
-                  type="number"
-                  placeholder="Min"
-                  className="pl-10 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white sm:text-sm"
-                  value={priceRange.min}
-                  onChange={(e) => handlePriceChange('min', e.target.value)}
-                  min="0"
-                />
-              </div>
-              <span className="text-gray-500">-</span>
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaMoneyBillWave className="text-gray-400" />
-                </div>
-                <input
-                  type="number"
-                  placeholder="Max"
-                  className="pl-10 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white sm:text-sm"
-                  value={priceRange.max}
-                  onChange={(e) => handlePriceChange('max', e.target.value)}
-                  min="0"
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* Venue */}
-          <div>
-            <Input
-              id="venue"
-              name="venue"
-              type="text"
-              label="Venue"
-              placeholder="Enter venue name"
-              leftIcon={<FaMapMarkerAlt />}
-              value={localFilters.venue || ''}
-              onChange={(e) => handleFilterChange('venue', e.target.value || undefined)}
-            />
-          </div>
+        <div className="flex items-center gap-4 md:col-span-2 lg:col-span-1">
+          <FilterInput id="minPrice" type="number" placeholder="Min Price" value={priceRange.min} onChange={(e) => handlePriceChange('min', e.target.value)} icon={<FaMoneyBillWave />} />
+          <span className="text-fluid-lg font-bold text-vibrant-purple">-</span>
+          <FilterInput id="maxPrice" type="number" placeholder="Max Price" value={priceRange.max} onChange={(e) => handlePriceChange('max', e.target.value)} icon={<FaMoneyBillWave />} />
         </div>
-        
-        {/* Sort Options */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Sort By
-            </label>
-            <div className="flex space-x-2">
-              <select
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                value={localFilters.sortBy || 'date'}
-                onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-              >
-                <option value="date">Date</option>
-                <option value="price">Price</option>
-                <option value="title">Title</option>
-              </select>
-              <select
-                className="block w-40 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                value={localFilters.sortOrder || 'asc'}
-                onChange={(e) => handleFilterChange('sortOrder', e.target.value)}
-              >
+
+        <div className="flex items-center gap-4 md:col-span-2 lg:col-span-2 xl:col-span-1">
+          <FilterSelect id="sortBy" value={localFilters.sortBy || 'date'} onChange={(e) => handleFilterChange('sortBy', e.target.value)} icon={<FaSortAmountDown />}>
+            <option value="date">Sort by Date</option>
+            <option value="price">Sort by Price</option>
+            <option value="title">Sort by Title</option>
+          </FilterSelect>
+        </div>
+
+        <div className="flex items-center gap-4">
+            <FilterSelect id="sortOrder" value={localFilters.sortOrder || 'asc'} onChange={(e) => handleFilterChange('sortOrder', e.target.value)} icon={localFilters.sortOrder === 'asc' ? <FaSortAmountUp /> : <FaSortAmountDown />}>
                 <option value="asc">Ascending</option>
                 <option value="desc">Descending</option>
-              </select>
-            </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="lg:col-span-3 flex justify-end items-end space-x-3">
-            {hasActiveFilters() && (
-              <Button
-                variant="outline"
-                size="md"
-                onClick={resetFilters}
-                leftIcon={<FaTimes />}
-              >
-                Clear All
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              size="md"
-              onClick={applyFilters}
-            >
-              Apply Filters
-            </Button>
-          </div>
+            </FilterSelect>
         </div>
+      </div>
+
+      <div className="flex justify-center md:justify-end items-center gap-4">
+        {hasActiveFilters() && (
+          <ActionButton onClick={resetFilters} variant="secondary">
+            <FaTimes /> Clear Filters
+          </ActionButton>
+        )}
+        <ActionButton onClick={applyFilters}>
+          <FaFilter /> Apply Filters
+        </ActionButton>
       </div>
     </div>
   );
 };
 
-export default EventFilters; 
+export default EventFilters;

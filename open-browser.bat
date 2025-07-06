@@ -1,0 +1,6 @@
+@echo off
+echo Opening Universal Ticket Booking application in your browser...
+start http://localhost:3001/health
+start http://localhost:5173/
+echo Browser tabs should be opening now...
+pause 

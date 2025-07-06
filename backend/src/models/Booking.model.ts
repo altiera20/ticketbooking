@@ -42,6 +42,9 @@ export class Booking {
   @Column({ type: 'timestamp' })
   bookingDate: Date;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  referenceNumber: string;
+
   @OneToMany(() => Seat, seat => seat.booking)
   seats: Seat[];
 

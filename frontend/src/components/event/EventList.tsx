@@ -1,7 +1,31 @@
 import React from 'react';
 import { EventListProps, Event } from '../../types';
 import EventCard from './EventCard';
-import LoadingSpinner from '../common/LoadingSpinner';
+import { FaRedo } from 'react-icons/fa';
+
+const NeonLoadingSpinner: React.FC = () => (
+  <div className="flex flex-col items-center justify-center gap-4 py-20">
+    <div className="w-24 h-24 border-8 border-vibrant-purple border-t-neon-pink rounded-full animate-spin-slow"></div>
+    <p className="font-heading text-fluid-2xl text-neon-pink animate-pulse">Scanning the Cosmos...</p>
+  </div>
+);
+
+const ActionButton: React.FC<{ onClick: () => void; children: React.ReactNode; }> = ({ onClick, children }) => (
+  <button
+    onClick={onClick}
+    className="font-heading text-fluid-base px-6 py-3 rounded-md shadow-3d bg-gradient-to-br from-neon-green to-electric-blue text-dark-text font-bold border-2 border-light-text transform transition-all duration-300 hover:scale-105 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2"
+  >
+    {children}
+  </button>
+);
+
+const InfoBox: React.FC<{ title: string; message: string; children?: React.ReactNode }> = ({ title, message, children }) => (
+  <div className="flex flex-col items-center justify-center py-20 text-center bg-dark-bg/30 backdrop-blur-sm rounded-2xl border-2 border-vibrant-purple shadow-neon-outline-purple">
+    <h3 className="font-heading text-fluid-4xl text-neon-pink animate-glow mb-2">{title}</h3>
+    <p className="font-body text-fluid-lg text-light-text/80 max-w-md mb-6">{message}</p>
+    {children}
+  </div>
+);
 
 export const EventList: React.FC<EventListProps> = ({
   events,
@@ -11,81 +35,50 @@ export const EventList: React.FC<EventListProps> = ({
   onEventClick,
   onRetry,
 }) => {
-  // Handle event click
   const handleEventClick = (event: Event) => {
     if (onEventClick) {
       onEventClick(event);
     }
   };
-  
-  // Show loading state
+
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <LoadingSpinner size="lg" color="primary" />
-        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading events...</p>
-      </div>
-    );
+    return <NeonLoadingSpinner />;
   }
-  
-  // Show error state
+
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="bg-error-100 dark:bg-error-900 text-error-600 dark:text-error-400 p-4 rounded-lg mb-4">
-          <p className="font-medium">Error loading events</p>
-          <p className="text-sm mt-1">{error}</p>
-        </div>
-        <button
-          className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-md transition-colors"
-          onClick={onRetry || (() => window.location.reload())}
-        >
-          Try Again
-        </button>
-      </div>
+      <InfoBox title="Cosmic Anomaly Detected" message={error}>
+        <ActionButton onClick={onRetry || (() => window.location.reload())}>
+          <FaRedo /> Try Again
+        </ActionButton>
+      </InfoBox>
     );
   }
-  
-  // Show empty state
+
   if (events.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-gray-600 dark:text-gray-400 text-lg mb-2">No events found</p>
-        <p className="text-gray-500 dark:text-gray-500">Try adjusting your filters or check back later.</p>
-      </div>
+      <InfoBox
+        title="Lost in Space"
+        message="No events match your query. Try adjusting your filters or exploring a different quadrant."
+      />
     );
   }
-  
-  // Grid view
-  if (viewType === 'grid') {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {events.map((event) => (
-          <EventCard
-            key={event.id}
-            event={event}
-            onClick={handleEventClick}
-            variant="default"
-          />
-        ))}
-      </div>
-    );
-  }
-  
-  // List view
+
+  const gridClasses = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8";
+  const listClasses = "flex flex-col gap-8";
+
   return (
-    <div className="space-y-4">
+    <div className={viewType === 'grid' ? gridClasses : listClasses}>
       {events.map((event) => (
         <EventCard
           key={event.id}
           event={event}
           onClick={handleEventClick}
-          variant="compact"
-          className="w-full"
+          variant={viewType === 'grid' ? 'default' : 'compact'}
         />
       ))}
     </div>
   );
 };
 
-export default EventList; 
+export default EventList;

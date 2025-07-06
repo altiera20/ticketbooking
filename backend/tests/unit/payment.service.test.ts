@@ -42,10 +42,26 @@ jest.mock('razorpay', () => {
         })
       },
       payments: {
-        refund: jest.fn().mockResolvedValue({ id: 'ref_test123' })
+        refund: jest.fn().mockResolvedValue({ 
+          id: 'ref_test123',
+          payment_id: 'pay_test123',
+          amount: 10000,
+          currency: 'INR',
+          status: 'processed'
+        })
       }
     };
   });
+});
+
+// Mock crypto for signature verification
+jest.mock('crypto', () => {
+  return {
+    createHmac: jest.fn().mockReturnValue({
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn().mockReturnValue('valid_signature')
+    })
+  };
 });
 
 // Mock AppDataSource
@@ -115,14 +131,16 @@ describe('PaymentService', () => {
       expect(mockPaymentRepo.save).toHaveBeenCalled();
     });
 
-    it('should process a credit card payment successfully', async () => {
+    it('should process a credit card payment with Razorpay successfully', async () => {
       // Mock data
       const bookingId = 'booking-123';
       const amount = 100;
       const method = PaymentMethod.CREDIT_CARD;
       const paymentDetails = {
         razorpayOrderId: 'order_123',
-        razorpayPaymentId: 'pay_123'
+        razorpayPaymentId: 'pay_123',
+        transactionId: 'pay_123',
+        orderId: 'order_123'
       };
       
       // Mock payment repo save
@@ -189,15 +207,6 @@ describe('PaymentService', () => {
 
   describe('verifyPaymentSignature', () => {
     it('should verify a valid payment signature', () => {
-      // Mock crypto for testing
-      const crypto = require('crypto');
-      const originalCreateHmac = crypto.createHmac;
-      
-      crypto.createHmac = jest.fn().mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        digest: jest.fn().mockReturnValue('valid_signature')
-      });
-      
       // Test data
       const orderId = 'order_123';
       const paymentId = 'pay_123';
@@ -206,9 +215,6 @@ describe('PaymentService', () => {
       // Execute
       const result = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
       
-      // Restore original crypto
-      crypto.createHmac = originalCreateHmac;
-      
       // Assertions
       expect(result).toBe(true);
     });
@@ -216,12 +222,7 @@ describe('PaymentService', () => {
     it('should reject an invalid payment signature', () => {
       // Mock crypto for testing
       const crypto = require('crypto');
-      const originalCreateHmac = crypto.createHmac;
-      
-      crypto.createHmac = jest.fn().mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        digest: jest.fn().mockReturnValue('valid_signature')
-      });
+      crypto.createHmac().digest.mockReturnValueOnce('valid_signature');
       
       // Test data
       const orderId = 'order_123';
@@ -231,8 +232,24 @@ describe('PaymentService', () => {
       // Execute
       const result = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
       
-      // Restore original crypto
-      crypto.createHmac = originalCreateHmac;
+      // Assertions
+      expect(result).toBe(false);
+    });
+    
+    it('should handle exceptions during signature verification', () => {
+      // Mock crypto to throw an error
+      const crypto = require('crypto');
+      crypto.createHmac.mockImplementationOnce(() => {
+        throw new Error('Crypto error');
+      });
+      
+      // Test data
+      const orderId = 'order_123';
+      const paymentId = 'pay_123';
+      const signature = 'valid_signature';
+      
+      // Execute
+      const result = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
       
       // Assertions
       expect(result).toBe(false);
@@ -248,16 +265,10 @@ describe('PaymentService', () => {
       mockPaymentRepo.findOne.mockResolvedValue({
         id: paymentId,
         bookingId: 'booking-123',
+        amount: 100,
         paymentMethod: PaymentMethod.CREDIT_CARD,
         status: PaymentStatus.COMPLETED,
-        amount: 100,
-        transactionId: 'pay_123',
-        booking: {
-          id: 'booking-123',
-          user: {
-            id: 'user-123'
-          }
-        }
+        transactionId: 'pay_test123'
       });
       
       // Mock payment repo save
@@ -268,8 +279,204 @@ describe('PaymentService', () => {
 
       // Assertions
       expect(result.status).toBe(PaymentStatus.REFUNDED);
-      expect(result.refundedAt).toBeDefined();
+      expect(result.refundId).toBeTruthy();
       expect(mockPaymentRepo.save).toHaveBeenCalled();
+    });
+
+    it('should process a refund for a wallet payment', async () => {
+      // Mock data
+      const paymentId = 'payment-123';
+      const userId = 'user-123';
+      const amount = 100;
+      
+      // Mock payment
+      mockPaymentRepo.findOne.mockResolvedValue({
+        id: paymentId,
+        bookingId: 'booking-123',
+        amount,
+        paymentMethod: PaymentMethod.WALLET,
+        status: PaymentStatus.COMPLETED,
+        transactionId: 'transaction-123'
+      });
+      
+      // Mock booking
+      mockBookingRepo.findOne.mockResolvedValue({
+        id: 'booking-123',
+        userId
+      });
+      
+      // Mock user
+      mockUserRepo.findOne.mockResolvedValue({
+        id: userId,
+        walletBalance: 50
+      });
+      
+      // Mock wallet transaction
+      mockWalletTransactionRepo.save.mockResolvedValue({
+        id: 'transaction-456',
+        userId,
+        amount,
+        type: TransactionType.CREDIT,
+        description: `Refund for booking #booking-123`,
+        bookingId: 'booking-123'
+      });
+      
+      // Mock payment repo save
+      mockPaymentRepo.save.mockImplementation((payment: Payment) => Promise.resolve(payment));
+
+      // Execute
+      const result = await paymentService.refundPayment(paymentId);
+
+      // Assertions
+      expect(result.status).toBe(PaymentStatus.REFUNDED);
+      expect(mockPaymentRepo.save).toHaveBeenCalled();
+      expect(mockWalletTransactionRepo.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleRazorpayWebhook', () => {
+    it('should handle payment.captured webhook event', async () => {
+      // Mock data
+      const webhookEvent = {
+        event: 'payment.captured',
+        payload: {
+          payment: {
+            entity: {
+              id: 'pay_test123',
+              order_id: 'order_test123',
+              amount: 10000
+            }
+          }
+        }
+      };
+      
+      // Mock payment
+      mockPaymentRepo.findOne.mockResolvedValue({
+        id: 'payment-123',
+        bookingId: 'booking-123',
+        amount: 100,
+        status: PaymentStatus.PENDING,
+        transactionId: 'order_test123'
+      });
+      
+      // Mock booking
+      mockBookingRepo.findOne.mockResolvedValue({
+        id: 'booking-123',
+        status: 'pending'
+      });
+      
+      // Execute
+      const result = await paymentService.handleRazorpayWebhook(webhookEvent);
+      
+      // Assertions
+      expect(result.success).toBe(true);
+      expect(mockPaymentRepo.save).toHaveBeenCalled();
+      expect(mockBookingRepo.save).toHaveBeenCalled();
+    });
+    
+    it('should handle payment.failed webhook event', async () => {
+      // Mock data
+      const webhookEvent = {
+        event: 'payment.failed',
+        payload: {
+          payment: {
+            entity: {
+              id: 'pay_test123',
+              order_id: 'order_test123'
+            }
+          }
+        }
+      };
+      
+      // Mock payment
+      mockPaymentRepo.findOne.mockResolvedValue({
+        id: 'payment-123',
+        bookingId: 'booking-123',
+        amount: 100,
+        status: PaymentStatus.PENDING,
+        transactionId: 'order_test123'
+      });
+      
+      // Execute
+      const result = await paymentService.handleRazorpayWebhook(webhookEvent);
+      
+      // Assertions
+      expect(result.success).toBe(true);
+      expect(mockPaymentRepo.save).toHaveBeenCalled();
+    });
+    
+    it('should handle refund.processed webhook event', async () => {
+      // Mock data
+      const webhookEvent = {
+        event: 'refund.processed',
+        payload: {
+          refund: {
+            entity: {
+              id: 'ref_test123',
+              payment_id: 'pay_test123'
+            }
+          }
+        }
+      };
+      
+      // Mock payment
+      mockPaymentRepo.findOne.mockResolvedValue({
+        id: 'payment-123',
+        bookingId: 'booking-123',
+        amount: 100,
+        status: PaymentStatus.COMPLETED,
+        transactionId: 'pay_test123'
+      });
+      
+      // Execute
+      const result = await paymentService.handleRazorpayWebhook(webhookEvent);
+      
+      // Assertions
+      expect(result.success).toBe(true);
+      expect(mockPaymentRepo.save).toHaveBeenCalled();
+    });
+    
+    it('should handle unrecognized webhook events', async () => {
+      // Mock data
+      const webhookEvent = {
+        event: 'unknown.event',
+        payload: {}
+      };
+      
+      // Execute
+      const result = await paymentService.handleRazorpayWebhook(webhookEvent);
+      
+      // Assertions
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Unhandled event type');
+    });
+    
+    it('should handle errors during webhook processing', async () => {
+      // Mock data
+      const webhookEvent = {
+        event: 'payment.captured',
+        payload: {
+          payment: {
+            entity: {
+              id: 'pay_test123',
+              order_id: 'order_test123',
+              amount: 10000
+            }
+          }
+        }
+      };
+      
+      // Mock repository to throw an error
+      mockPaymentRepo.findOne.mockImplementationOnce(() => {
+        throw new Error('Database error');
+      });
+      
+      // Execute
+      const result = await paymentService.handleRazorpayWebhook(webhookEvent);
+      
+      // Assertions
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Error processing webhook');
     });
   });
 }); 

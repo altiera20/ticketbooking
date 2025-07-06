@@ -10,23 +10,47 @@ class EventService {
   async getEvents(params?: {
     page?: number;
     limit?: number;
-    category?: string;
+    type?: string;
     date?: string;
     search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    venue?: string;
+    sortBy?: 'price' | 'date' | 'title';
+    sortOrder?: 'asc' | 'desc';
   }): Promise<{ events: Event[]; total: number }> {
     try {
-      const response = await api.get<{ success: boolean; data: { events: Event[]; total: number } }>('/events', {
+      const response = await api.get<{ events: Event[]; pagination: { total: number } }>('/events', {
         params
       });
       
-      if (response.data.success && response.data.data) {
-        return response.data.data;
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
+
+      if (!response.data.events || !Array.isArray(response.data.events)) {
+        throw new Error('Invalid events data received from server');
       }
       
-      throw new Error('Failed to fetch events');
-    } catch (error) {
+      return {
+        events: response.data.events,
+        total: response.data.pagination?.total || 0
+      };
+    } catch (error: any) {
       console.error('Get events error:', error);
-      throw new Error('Failed to fetch events');
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+        throw new Error(error.response.data?.message || 'Failed to fetch events');
+      } else if (error.request) {
+        // The request was made but no response was received
+        throw new Error('No response received from server');
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        throw new Error(error.message || 'Failed to fetch events');
+      }
     }
   }
 
@@ -37,16 +61,19 @@ class EventService {
    */
   async getEventById(id: string): Promise<Event> {
     try {
-      const response = await api.get<{ success: boolean; data: Event }>(`/events/${id}`);
+      const response = await api.get<{ event: Event }>(`/events/${id}`);
       
-      if (response.data.success && response.data.data) {
-        return response.data.data;
+      if (!response.data || !response.data.event) {
+        throw new Error('Event not found');
       }
       
-      throw new Error('Event not found');
-    } catch (error) {
+      return response.data.event;
+    } catch (error: any) {
       console.error('Get event error:', error);
-      throw new Error('Failed to fetch event details');
+      if (error.response?.status === 404) {
+        throw new Error('Event not found');
+      }
+      throw new Error(error.response?.data?.message || error.message || 'Failed to fetch event details');
     }
   }
 
@@ -59,14 +86,14 @@ class EventService {
     try {
       const response = await api.get<{ success: boolean; data: Seat[] }>(`/events/${eventId}/seats`);
       
-      if (response.data.success && response.data.data) {
-        return response.data.data;
+      if (!response.data || !response.data.success || !response.data.data) {
+        throw new Error('Failed to fetch seats');
       }
       
-      throw new Error('Failed to fetch seats');
-    } catch (error) {
+      return response.data.data;
+    } catch (error: any) {
       console.error('Get event seats error:', error);
-      throw new Error('Failed to fetch seats');
+      throw new Error(error.response?.data?.message || error.message || 'Failed to fetch seats');
     }
   }
 

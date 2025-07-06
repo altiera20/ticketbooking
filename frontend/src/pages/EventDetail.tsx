@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, Clock, Users, Star, ArrowLeft, AlertCircle } from 'lucide-react';
-import { eventService } from '../services/event.service';
-import bookingService, { Seat } from '../services/booking.service';
+import eventService from '../services/event.service';
+import bookingService from '../services/booking.service';
 import SeatSelection from '../components/booking/SeatSelection';
-import { Event } from '../types';
+import { Event, Seat } from '../types';
+import { formatCurrency } from '../utils/formatters';
+import { useAuth } from '../hooks/useAuth';
 
 const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   
   const [event, setEvent] = useState<Event | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -53,7 +56,7 @@ const EventDetail: React.FC = () => {
     try {
       setSeatsLoading(true);
       setSeatError(null);
-      const seatsData = await bookingService.getEventSeats(id);
+      const seatsData = await eventService.getEventSeats(id);
       setSeats(seatsData);
     } catch (err: any) {
       console.error('Error loading seats:', err);
@@ -76,34 +79,32 @@ const EventDetail: React.FC = () => {
   };
 
   const handleProceedToBooking = async () => {
+    if (!isAuthenticated) {
+      // Save current event and selected seats to session storage
+      sessionStorage.setItem('bookingIntent', JSON.stringify({
+        eventId: id,
+        selectedSeats: selectedSeats.map(seat => seat.id)
+      }));
+      
+      // Redirect to login with return URL
+      navigate('/login', { state: { from: `/events/${id}` } });
+      return;
+    }
+
     if (selectedSeats.length === 0) {
       alert('Please select at least one seat');
       return;
     }
 
-    try {
-      setReservingSeats(true);
-      
-      // Reserve seats temporarily
-      await bookingService.reserveSeats({
-        eventId: id!,
-        seatIds: selectedSeats.map(seat => seat.id)
-      });
-
-      // Navigate to booking page with selected seats
-      navigate('/booking', {
-        state: {
-          event,
-          selectedSeats,
-          totalAmount: selectedSeats.reduce((sum, seat) => sum + seat.price, 0)
-        }
-      });
-    } catch (err: any) {
-      console.error('Error reserving seats:', err);
-      alert(err.message || 'Failed to reserve seats. Please try again.');
-    } finally {
-      setReservingSeats(false);
-    }
+    // Skip seat reservation here and proceed directly to booking
+    // The seat reservation will be handled in the Booking component
+    navigate('/booking', {
+      state: {
+        event,
+        selectedSeats,
+        totalAmount: selectedSeats.reduce((sum, seat) => sum + seat.price, 0)
+      }
+    });
   };
 
   const handleRetry = () => {
@@ -226,7 +227,7 @@ const EventDetail: React.FC = () => {
                   <div className="flex items-center text-gray-600">
                     <Star className="h-5 w-5 mr-3" />
                     <div>
-                      <p className="font-semibold text-gray-900">Starting from ${event.price}</p>
+                      <p className="font-semibold text-gray-900">Starting from {formatCurrency(Number(event.price))}</p>
                     </div>
                   </div>
                 </div>
@@ -248,84 +249,53 @@ const EventDetail: React.FC = () => {
                 <div>
                   <div className="border rounded-lg p-4 mb-4">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="font-medium">General Admission</span>
-                      <span className="font-bold">${event.price}</span>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      {event.availableSeats} seats available
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => setShowSeatSelection(true)}
-                    disabled={event.availableSeats === 0}
-                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  >
-                    {event.availableSeats === 0 ? 'Sold Out' : 'Select Seats'}
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  {seatError ? (
-                    <div className="mb-4">
-                      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        <p>{seatError}</p>
+                      <div>
+                        <p className="font-semibold">Starting from</p>
+                        <p className="text-2xl font-bold text-blue-600">{formatCurrency(Number(event.price))}</p>
                       </div>
-                      <button
-                        onClick={handleRetrySeats}
-                        className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 transition"
+                      <button 
+                        onClick={() => setShowSeatSelection(true)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
                       >
-                        Retry Loading Seats
+                        Select Seats
                       </button>
                     </div>
-                  ) : seatsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-3"></div>
-                      <p className="text-gray-600">Loading seats...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <SeatSelection 
-                        seats={seats} 
-                        selectedSeats={selectedSeats} 
-                        onSeatSelect={handleSeatSelect} 
-                      />
-                      
-                      <div className="mt-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium">Selected Seats</span>
-                          <span className="font-bold">
-                            {selectedSeats.length} seat{selectedSeats.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        {selectedSeats.length > 0 && (
-                          <div className="text-sm text-gray-600 mb-2">
-                            {selectedSeats.map(seat => `${seat.section}-${seat.row}-${seat.seatNumber}`).join(', ')}
-                          </div>
-                        )}
-                        <div className="text-lg font-bold">
-                          Total: ${selectedSeats.reduce((sum, seat) => sum + seat.price, 0).toFixed(2)}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="space-y-3 mt-4">
-                    <button
-                      onClick={handleProceedToBooking}
-                      disabled={selectedSeats.length === 0 || seatsLoading || !!seatError || reservingSeats}
-                      className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    >
-                      {reservingSeats ? 'Processing...' : 'Proceed to Booking'}
-                    </button>
-                    <button
-                      onClick={() => setShowSeatSelection(false)}
-                      className="w-full bg-gray-200 text-gray-800 py-3 px-4 rounded-lg font-semibold hover:bg-gray-300 transition"
-                    >
-                      Back
-                    </button>
                   </div>
+                  {seatError &&
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                      <strong className="font-bold">Error:</strong>
+                      <span className="block sm:inline"> {seatError}</span>
+                      <button onClick={handleRetrySeats} className="absolute top-0 bottom-0 right-0 px-4 py-3">
+                        <span className="text-2xl">↻</span>
+                      </button>
+                    </div>
+                  }
                 </div>
+              ) : (
+                seatsLoading ? 
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p>Loading seats...</p>
+                  </div>
+                :
+                  <div>
+                    <SeatSelection
+                      seats={seats.map(s => ({...s, eventId: id!}))}
+                      selectedSeats={selectedSeats.map(s => ({...s, eventId: id!}))}
+                      onSeatSelect={(seat) => handleSeatSelect(seat as Seat)}
+                    />
+                    <div className="mt-6">
+                      <h4 className="font-semibold">Selected Seats: {selectedSeats.length}</h4>
+                      <p className="text-lg font-bold">Total: {formatCurrency(selectedSeats.reduce((sum, seat) => sum + Number(seat.price), 0))}</p>
+                      <button
+                        onClick={handleProceedToBooking}
+                        disabled={selectedSeats.length === 0 || reservingSeats}
+                        className="w-full mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-400"
+                      >
+                        {reservingSeats ? 'Reserving...' : 'Proceed to Booking'}
+                      </button>
+                    </div>
+                  </div>
               )}
             </div>
           </div>

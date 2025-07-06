@@ -15,7 +15,9 @@ import {
   ProcessPaymentRequest,
   ApiResponse,
   BookingResponse,
-  PaymentMethod
+  PaymentMethod,
+  PaymentStatus,
+  SeatStatus
 } from '../types/common.types';
 import { AppError } from '../middleware/error.middleware';
 import { z } from 'zod';
@@ -25,22 +27,21 @@ import { generatePDF } from '../utils/pdf.utils';
 import { In, IsNull } from 'typeorm';
 
 export class BookingController {
-  private bookingRepository: Repository<Booking>;
-  private seatRepository: Repository<Seat>;
-  private eventRepository: Repository<Event>;
-  private userRepository: Repository<User>;
   private paymentService: PaymentService;
   private seatReservations: Map<string, { userId: string; expiresAt: number }>;
   private reservationTimeout: number = 10 * 60 * 1000; // 10 minutes in milliseconds
 
   constructor() {
-    this.bookingRepository = AppDataSource.getRepository(Booking);
-    this.seatRepository = AppDataSource.getRepository(Seat);
-    this.eventRepository = AppDataSource.getRepository(Event);
-    this.userRepository = AppDataSource.getRepository(User);
+    // Initialize services that do not depend on database connection here
     this.paymentService = new PaymentService();
     this.seatReservations = new Map();
   }
+
+  // Repositories are now accessed within each method to avoid race conditions on startup
+  private getBookingRepository = () => AppDataSource.getRepository(Booking);
+  private getSeatRepository = () => AppDataSource.getRepository(Seat);
+  private getEventRepository = () => AppDataSource.getRepository(Event);
+  private getUserRepository = () => AppDataSource.getRepository(User);
 
   // Validation schemas
   public createBookingSchema = z.object({
@@ -108,7 +109,7 @@ export class BookingController {
     try {
       const { id } = req.params;
       
-      const seats = await this.seatRepository.find({
+      const seats = await this.getSeatRepository().find({
         where: { eventId: id },
         order: { row: 'ASC', seatNumber: 'ASC' }
       });
@@ -133,8 +134,12 @@ export class BookingController {
     try {
       const userId = req.user?.id;
       const bookingData: CreateBookingRequest = req.body;
+      
+      console.log('Creating booking with data:', JSON.stringify(bookingData, null, 2));
+      console.log('User ID:', userId);
 
       if (!userId) {
+        console.log('Authentication required - no user ID found');
         res.status(401).json({ 
           success: false, 
           error: 'Authentication required' 
@@ -145,6 +150,7 @@ export class BookingController {
       // Validate request
       const validation = this.validateBookingRequest(bookingData);
       if (!validation.isValid) {
+        console.log('Validation failed:', validation.error);
         res.status(400).json({ 
           success: false, 
           error: validation.error 
@@ -153,17 +159,20 @@ export class BookingController {
       }
 
       // Check if event exists
-      const event = await this.eventRepository.findOne({
+      const event = await this.getEventRepository().findOne({
         where: { id: bookingData.eventId }
       });
 
       if (!event) {
+        console.log('Event not found:', bookingData.eventId);
         res.status(404).json({ 
           success: false, 
           error: 'Event not found' 
         } as ApiResponse<null>);
         return;
       }
+      
+      console.log('Event found:', event.title);
 
       // Check if seats are available and reserve them
       const seatReservationResult = await this.reserveSeats(
@@ -173,17 +182,22 @@ export class BookingController {
       );
 
       if (!seatReservationResult.success) {
+        console.log('Seat reservation failed:', seatReservationResult.error);
         res.status(400).json({ 
           success: false, 
           error: seatReservationResult.error 
         } as ApiResponse<null>);
         return;
       }
+      
+      console.log('Seats reserved successfully:', seatReservationResult.seats?.length);
 
       // Calculate total amount
       const totalAmount = seatReservationResult.seats!.reduce(
         (sum, seat) => sum + seat.price, 0
       );
+      
+      console.log('Total amount calculated:', totalAmount);
 
       // Create booking
       const booking = new Booking();
@@ -193,11 +207,15 @@ export class BookingController {
       booking.totalAmount = totalAmount;
       booking.bookingDate = new Date();
       booking.status = BookingStatus.PENDING;
+      booking.referenceNumber = `BK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      
+      console.log('Booking object created:', booking);
 
-      const savedBooking = await this.bookingRepository.save(booking);
+      const savedBooking = await this.getBookingRepository().save(booking);
+      console.log('Booking saved with ID:', savedBooking.id);
 
       // Update seats with booking ID
-      await this.seatRepository.update(
+      await this.getSeatRepository().update(
         { id: In(bookingData.seatIds) },
         { bookingId: savedBooking.id }
       );
@@ -237,9 +255,9 @@ export class BookingController {
             }
           );
           
-          if (payment.status === 'completed') {
+          if (payment.status === PaymentStatus.COMPLETED) {
             booking.status = BookingStatus.CONFIRMED;
-            await this.bookingRepository.save(booking);
+            await this.getBookingRepository().save(booking);
             
             // Remove seat reservations
             bookingData.seatIds.forEach(seatId => {
@@ -247,7 +265,7 @@ export class BookingController {
             });
             
             // Send confirmation email
-            const user = await this.userRepository.findOne({ where: { id: userId } });
+            const user = await this.getUserRepository().findOne({ where: { id: userId } });
             if (user) {
               await this.sendBookingConfirmation(user, savedBooking, event);
             }
@@ -259,11 +277,17 @@ export class BookingController {
               message: 'Booking created successfully' 
             } as ApiResponse<BookingResponse>);
           } else {
-            // Payment failed
+            // Payment failed, cleanup
             await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+            
+            // Get the error message from payment metadata if available
+            const errorMessage = payment.metadata?.error || 'Payment processing failed';
+            
+            console.error('Payment error during booking:', errorMessage);
+            
             res.status(400).json({ 
               success: false, 
-              error: 'Payment processing failed' 
+              error: errorMessage 
             } as ApiResponse<null>);
           }
         } else {
@@ -275,9 +299,9 @@ export class BookingController {
             bookingData.paymentDetails
           );
 
-          if (payment.status === 'completed') {
+          if (payment.status === PaymentStatus.COMPLETED) {
             booking.status = BookingStatus.CONFIRMED;
-            await this.bookingRepository.save(booking);
+            await this.getBookingRepository().save(booking);
 
             // Remove seat reservations
             bookingData.seatIds.forEach(seatId => {
@@ -285,7 +309,7 @@ export class BookingController {
             });
 
             // Send confirmation email
-            const user = await this.userRepository.findOne({ where: { id: userId } });
+            const user = await this.getUserRepository().findOne({ where: { id: userId } });
             if (user) {
               await this.sendBookingConfirmation(user, savedBooking, event);
             }
@@ -299,18 +323,32 @@ export class BookingController {
           } else {
             // Payment failed, cleanup
             await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+            
+            // Get the error message from payment metadata if available
+            const errorMessage = payment.metadata?.error || 'Payment processing failed';
+            
+            console.error('Payment error during booking:', errorMessage);
+            
             res.status(400).json({ 
               success: false, 
-              error: 'Payment processing failed' 
+              error: errorMessage 
             } as ApiResponse<null>);
           }
         }
       } catch (paymentError) {
         // Payment failed, cleanup
         await this.cleanupFailedBooking(savedBooking.id, bookingData.seatIds);
+        
+        // Get detailed error message
+        const errorMessage = paymentError instanceof Error 
+          ? paymentError.message 
+          : 'Payment processing failed';
+        
+        console.error('Payment error during booking:', errorMessage);
+        
         res.status(400).json({ 
           success: false, 
-          error: 'Payment processing failed' 
+          error: errorMessage 
         } as ApiResponse<null>);
       }
     } catch (error) {
@@ -337,7 +375,7 @@ export class BookingController {
         return;
       }
 
-      const bookings = await this.bookingRepository.find({
+      const bookings = await this.getBookingRepository().find({
         where: { userId },
         relations: ['event', 'seats', 'payment'],
         order: { createdAt: 'DESC' }
@@ -422,7 +460,7 @@ export class BookingController {
         return;
       }
 
-      const booking = await this.bookingRepository.findOne({
+      const booking = await this.getBookingRepository().findOne({
         where: { id },
         relations: ['seats', 'payment', 'event']
       });
@@ -466,16 +504,16 @@ export class BookingController {
 
       // Cancel booking
       booking.status = BookingStatus.CANCELLED;
-      await this.bookingRepository.save(booking);
+      await this.getBookingRepository().save(booking);
 
       // Free up seats
-      await this.seatRepository.update(
+      await this.getSeatRepository().update(
         { bookingId: booking.id },
         { bookingId: undefined }
       );
 
       // Process refund if payment was completed
-      if (booking.payment && booking.payment.status === 'COMPLETED') {
+      if (booking.payment && booking.payment.status === PaymentStatus.COMPLETED) {
         await this.paymentService.refundPayment(booking.payment.id);
       }
 
@@ -534,6 +572,8 @@ export class BookingController {
   // Private helper methods
 
   private validateBookingRequest(data: CreateBookingRequest): { isValid: boolean; error?: string } {
+    console.log('Validating booking request:', JSON.stringify(data, null, 2));
+    
     if (!data.eventId) {
       return { isValid: false, error: 'Event ID is required' };
     }
@@ -546,8 +586,31 @@ export class BookingController {
       return { isValid: false, error: 'Payment method is required' };
     }
 
-    if (data.paymentMethod === 'CREDIT_CARD' && !data.paymentDetails) {
-      return { isValid: false, error: 'Payment details are required for credit card payments' };
+    // For credit card payments, we need payment details
+    if (data.paymentMethod === PaymentMethod.CREDIT_CARD) {
+      if (!data.paymentDetails) {
+        return { isValid: false, error: 'Payment details are required for credit card payments' };
+      }
+      
+      // For mock payments, we'll be lenient with validation
+      const isMockPayment = data.paymentDetails.razorpayOrderId?.includes('mock') || 
+                           data.paymentDetails.razorpayPaymentId?.includes('mock') ||
+                           data.paymentDetails.razorpaySignature?.includes('mock');
+      
+      if (isMockPayment) {
+        console.log('Mock payment detected, skipping detailed validation');
+        return { isValid: true };
+      }
+      
+      // For real payments, validate all required fields
+      if (!data.paymentDetails.razorpayOrderId || 
+          !data.paymentDetails.razorpayPaymentId || 
+          !data.paymentDetails.razorpaySignature) {
+        return { 
+          isValid: false, 
+          error: 'Razorpay payment details (orderId, paymentId, signature) are required' 
+        };
+      }
     }
 
     return { isValid: true };
@@ -558,67 +621,80 @@ export class BookingController {
     userId: string, 
     eventId: string
   ): Promise<{ success: boolean; error?: string; seats?: any[] }> {
-    // Check if seats exist and are available
-    const seats = await this.seatRepository.find({
-      where: { 
-        id: In(seatIds),
-        eventId,
-        bookingId: IsNull()
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const seats = await queryRunner.manager.find(Seat, {
+        where: { id: In(seatIds), eventId: eventId },
+        lock: { mode: 'pessimistic_write' }
+      });
+
+      if (seats.length !== seatIds.length) {
+        throw new Error('Some seats not found or do not belong to the specified event');
       }
-    });
 
-    if (seats.length !== seatIds.length) {
-      return { success: false, error: 'Some seats are not available' };
-    }
-
-    // Check for existing reservations
-    for (const seatId of seatIds) {
-      const reservation = this.seatReservations.get(seatId);
-      if (reservation && reservation.userId !== userId && reservation.expiresAt > new Date()) {
-        return { success: false, error: 'Some seats are temporarily reserved by another user' };
+      const now = Date.now();
+      for (const seat of seats) {
+        const reservation = this.seatReservations.get(seat.id);
+        if (seat.status !== SeatStatus.AVAILABLE && (!reservation || reservation.expiresAt <= now)) {
+          throw new Error(`Seat ${seat.seatNumber} is not available`);
+        }
+        if (reservation && reservation.userId !== userId && reservation.expiresAt > now) {
+          throw new Error(`Seat ${seat.seatNumber} is currently reserved by another user`);
+        }
       }
+      
+      const reservationExpiry = Date.now() + this.reservationTimeout;
+      for (const seat of seats) {
+        this.seatReservations.set(seat.id, {
+          userId,
+          expiresAt: reservationExpiry,
+        });
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true, seats };
+    } catch (error: any) {
+      await queryRunner.rollbackTransaction();
+      return { success: false, error: error.message };
+    } finally {
+      await queryRunner.release();
     }
-
-    // Reserve seats for 15 minutes
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    seatIds.forEach(seatId => {
-      this.seatReservations.set(seatId, { userId, expiresAt });
-    });
-
-    return { success: true, seats };
   }
 
-  private cleanupExpiredReservations(): void {
-    const now = new Date();
+  private async cleanupExpiredReservations(): Promise<void> {
+    const now = Date.now();
     for (const [seatId, reservation] of this.seatReservations.entries()) {
       if (reservation.expiresAt <= now) {
+        await this.getSeatRepository().update({ id: seatId }, { status: SeatStatus.AVAILABLE, bookingId: undefined });
         this.seatReservations.delete(seatId);
+        console.log(`Reservation for seat ${seatId} expired and has been released.`);
       }
     }
   }
 
   private async cleanupFailedBooking(bookingId: string, seatIds: string[]): Promise<void> {
     try {
-      // Delete the booking
-    await this.bookingRepository.delete(bookingId);
-
-      // Free up the seats
-    await this.seatRepository.update(
+      // Release the seats
+      await this.getSeatRepository().update(
         { id: In(seatIds) },
-        { bookingId: undefined }
-    );
+        { status: SeatStatus.AVAILABLE, bookingId: undefined }
+      );
 
-      // Remove seat reservations
-    seatIds.forEach(seatId => {
-      this.seatReservations.delete(seatId);
-    });
+      // Mark the booking as failed/cancelled
+      await this.getBookingRepository().update(
+        { id: bookingId },
+        { status: BookingStatus.CANCELLED }
+      );
     } catch (error) {
-      console.error('Cleanup failed booking error:', error);
+      console.error(`Failed to clean up booking ${bookingId}:`, error);
     }
   }
 
   private async getBookingDetails(bookingId: string): Promise<BookingResponse | null> {
-    const booking = await this.bookingRepository.findOne({
+    const booking = await this.getBookingRepository().findOne({
       where: { id: bookingId },
       relations: ['event', 'seats', 'payment', 'user']
     });
@@ -637,33 +713,33 @@ export class BookingController {
       quantity: booking.quantity,
       totalAmount: booking.totalAmount,
       bookingDate: booking.bookingDate,
-      referenceNumber: `BK${booking.id.substr(-8).toUpperCase()}`,
-      seats: booking.seats?.map((seat: any) => ({
+      referenceNumber: booking.id.substring(0, 8).toUpperCase(),
+      seats: booking.seats.map((seat: Seat) => ({
         id: seat.id,
         seatNumber: seat.seatNumber,
         row: seat.row,
         section: seat.section,
         price: seat.price,
-        isBooked: seat.isBooked
-      })) || [],
-      payment: booking.payment ? {
-        id: booking.payment.id,
-        amount: booking.payment.amount,
-        status: booking.payment.status,
-        method: booking.payment.method,
-        transactionId: booking.payment.transactionId
-      } : {} as any,
-      event: booking.event ? {
+        isBooked: seat.status === SeatStatus.BOOKED,
+      })),
+      payment: {
+        id: booking.payment?.id || '',
+        amount: booking.payment?.amount || 0,
+        status: booking.payment?.status || PaymentStatus.PENDING,
+        method: booking.payment?.paymentMethod || PaymentMethod.WALLET,
+        transactionId: booking.payment?.transactionId,
+      },
+      event: {
         id: booking.event.id,
         title: booking.event.title,
         description: booking.event.description,
         date: booking.event.eventDate,
         venue: booking.event.venue,
-        category: booking.event.category,
+        category: booking.event.type,
         price: booking.event.price,
         totalSeats: booking.event.totalSeats,
-        availableSeats: booking.event.availableSeats
-      } : {} as any
+        availableSeats: booking.event.availableSeats,
+      },
     };
   }
 

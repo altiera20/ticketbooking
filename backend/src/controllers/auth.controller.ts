@@ -5,11 +5,13 @@ import { redis } from '../config/redis';
 import { UserRole } from '../types/common.types';
 import { AppError } from '../middleware/error.middleware';
 import emailService from '../services/email.service';
-import { generateTokens, verifyToken } from '../utils/jwt.utils';
+import { generatePasswordResetToken, generateTokens, verifyToken } from '../utils/jwt.utils';
+import { WalletTransaction, TransactionType } from '../models/WalletTransaction.model';
 
 export class AuthController {
   private userRepository = AppDataSource.getRepository(User);
-  private INITIAL_WALLET_BALANCE = 1000; // Initial credits for new users
+  private walletTransactionRepository = AppDataSource.getRepository(WalletTransaction);
+  private INITIAL_WALLET_BALANCE = 2000; // Initial credits for new users
 
   public register = async (req: Request, res: Response): Promise<Response> => {
     try {
@@ -20,6 +22,8 @@ export class AuthController {
         throw new AppError(400, 'Email already registered');
       }
 
+      console.log(`Creating new user with initial wallet balance: ${this.INITIAL_WALLET_BALANCE}`);
+      
       const user = this.userRepository.create({
         firstName,
         lastName,
@@ -31,12 +35,24 @@ export class AuthController {
       });
 
       await this.userRepository.save(user);
+      console.log(`User created with ID: ${user.id}, wallet balance: ${user.walletBalance}`);
+
+      // Create wallet transaction record for initial balance
+      const walletTransaction = this.walletTransactionRepository.create({
+        userId: user.id,
+        type: TransactionType.CREDIT,
+        amount: this.INITIAL_WALLET_BALANCE,
+        description: 'Welcome bonus credit',
+      });
+      
+      await this.walletTransactionRepository.save(walletTransaction);
+      console.log(`Initial wallet transaction created: ${walletTransaction.id}, amount: ${walletTransaction.amount}`);
 
       // Generate tokens
       const { accessToken, refreshToken } = generateTokens(user);
 
-      // Store refresh token in Redis
-      await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60); // 7 days
+      // Store refresh token in Redis with expiry
+      await redis.setex(`refresh_token:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
 
       // Send welcome email
       await emailService.sendWelcomeEmail(user.email, user.firstName);
@@ -55,6 +71,7 @@ export class AuthController {
         },
       });
     } catch (error) {
+      console.error('Registration error:', error);
       if (error instanceof AppError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
@@ -65,13 +82,19 @@ export class AuthController {
   public login = async (req: Request, res: Response): Promise<Response> => {
     try {
       const { email, password } = req.body;
+      console.log('Login attempt:', { email, passwordLength: password?.length });
 
       const user = await this.userRepository.findOne({ where: { email } });
+      console.log('User found:', !!user);
+      
       if (!user) {
         throw new AppError(401, 'Invalid credentials');
       }
 
+      console.log('Comparing password...');
       const isPasswordValid = await user.comparePassword(password);
+      console.log('Password valid:', isPasswordValid);
+      
       if (!isPasswordValid) {
         throw new AppError(401, 'Invalid credentials');
       }
@@ -83,8 +106,8 @@ export class AuthController {
       // Generate tokens
       const { accessToken, refreshToken } = generateTokens(user);
 
-      // Store refresh token in Redis
-      await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
+      // Store refresh token in Redis with expiry
+      await redis.setex(`refresh_token:${user.id}`, 7 * 24 * 60 * 60, refreshToken);
 
       return res.status(200).json({
         message: 'Login successful',
@@ -129,8 +152,8 @@ export class AuthController {
       // Generate new tokens
       const tokens = generateTokens(user);
 
-      // Update refresh token in Redis
-      await redis.set(`refresh_token:${user.id}`, tokens.refreshToken, 'EX', 7 * 24 * 60 * 60);
+      // Store refresh token in Redis with expiry
+      await redis.setex(`refresh_token:${user.id}`, 7 * 24 * 60 * 60, tokens.refreshToken);
 
       return res.json(tokens);
     } catch (error) {
@@ -178,7 +201,7 @@ export class AuthController {
       }
 
       // Generate password reset token
-      const resetToken = generateTokens(user).accessToken;
+      const resetToken = generatePasswordResetToken(user.id);
 
       // Send password reset email
       await emailService.sendPasswordResetEmail(user.email, resetToken, user.firstName);
@@ -204,6 +227,9 @@ export class AuthController {
 
       // Invalidate all refresh tokens
       await redis.del(`refresh_token:${user.id}`);
+
+      // Send password reset success email
+      await emailService.sendPasswordResetSuccessEmail(user.email, user.firstName);
 
       return res.json({ message: 'Password reset successful' });
     } catch (error) {

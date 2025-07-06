@@ -64,4 +64,7 @@ router.get('/bookings', authMiddleware, userController.getUserBookings);
 // User transactions route
 router.get('/transactions', authMiddleware, userController.getUserTransactions);
 
+// User wallet balance route
+router.get('/wallet', authMiddleware, userController.getWalletBalance);
+
 export default router;

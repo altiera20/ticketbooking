@@ -43,7 +43,7 @@ const ProfileForm: React.FC = () => {
   
   const onSubmit = async (data: ProfileFormData) => {
     try {
-      const response = await api.put('/api/users/profile', data);
+      const response = await api.put<{user: any}>('/users/profile', data);
       
       if (response.data.user) {
         dispatch(updateUserProfile(response.data.user));
@@ -52,6 +52,7 @@ const ProfileForm: React.FC = () => {
       }
     } catch (error) {
       toast.error('Failed to update profile');
+      console.error('Profile update error:', error);
     }
   };
   
@@ -112,12 +113,12 @@ const ProfileForm: React.FC = () => {
         <div>
           <Input
             id="email"
+            name="email"
             label="Email Address"
             placeholder="john.doe@example.com"
             leftIcon={<FaEnvelope />}
             value={user?.email || ''}
             disabled
-            helperText="Email cannot be changed"
           />
         </div>
         

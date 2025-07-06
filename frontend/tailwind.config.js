@@ -1,137 +1,94 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
-    "./public/index.html"
-  ],
   darkMode: 'class',
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
-        },
-        secondary: {
-          50: '#fdf4ff',
-          100: '#fae8ff',
-          200: '#f5d0fe',
-          300: '#f0abfc',
-          400: '#e879f9',
-          500: '#d946ef',
-          600: '#c026d3',
-          700: '#a21caf',
-          800: '#86198f',
-          900: '#701a75',
-          950: '#4a044e',
-        },
-        accent: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
-          950: '#2e1065',
-        },
-        success: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-          950: '#052e16',
-        },
-        error: {
-          50: '#fef2f2',
-          100: '#fee2e2',
-          200: '#fecaca',
-          300: '#fca5a5',
-          400: '#f87171',
-          500: '#ef4444',
-          600: '#dc2626',
-          700: '#b91c1c',
-          800: '#991b1b',
-          900: '#7f1d1d',
-          950: '#450a0a',
-        },
-        warning: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f59e0b',
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
-          950: '#451a03',
-        },
-        dark: {
-          100: '#d5d5d5',
-          200: '#ababab',
-          300: '#808080',
-          400: '#565656',
-          500: '#2b2b2b',
-          600: '#232323',
-          700: '#1a1a1a',
-          800: '#121212',
-          900: '#090909',
-        },
-        light: {
-          100: '#ffffff',
-          200: '#fafafa',
-          300: '#f5f5f5',
-          400: '#f0f0f0',
-          500: '#ebebeb',
-          600: '#bcbcbc',
-          700: '#8d8d8d',
-          800: '#5e5e5e',
-          900: '#2f2f2f',
-        },
+        'neon-pink': '#ff00ff',
+        'neon-green': '#39ff14',
+        'electric-blue': '#00ffff',
+        'vibrant-purple': '#9400d3',
+        'laser-lemon': '#dfff00',
+        'dark-bg': '#1a001a',
+        'light-text': '#f0f0f0',
+        'dark-text': '#333333',
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-        heading: ['Poppins', 'ui-sans-serif', 'system-ui'],
+        heading: ['Bungee', 'cursive'],
+        body: ['Poppins', 'sans-serif'],
       },
-      boxShadow: {
-        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-        'button': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-        'button-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+      keyframes: {
+        'glow': {
+          '0%, 100%': { textShadow: '0 0 5px #fff, 0 0 10px #fff, 0 0 15px #ff00ff, 0 0 20px #ff00ff, 0 0 25px #ff00ff, 0 0 30px #ff00ff, 0 0 35px #ff00ff' },
+          '50%': { textShadow: '0 0 10px #fff, 0 0 20px #fff, 0 0 30px #ff00ff, 0 0 40px #ff00ff, 0 0 50px #ff00ff, 0 0 60px #ff00ff, 0 0 70px #ff00ff' },
+        },
+        'pulse-glow': {
+          '0%, 100%': { boxShadow: '0 0 5px var(--glow-color-1), 0 0 10px var(--glow-color-2)' },
+          '50%': { boxShadow: '0 0 20px var(--glow-color-1), 0 0 30px var(--glow-color-2)' },
+        },
+        'shake': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-5px)' },
+          '20%, 40%, 60%, 80%': { transform: 'translateX(5px)' },
+        },
+        'gradient-shift': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        }
       },
       animation: {
-        'spin-slow': 'spin 3s linear infinite',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'glow': 'glow 1.5s ease-in-out infinite alternate',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite alternate',
+        'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
+        'gradient-shift': 'gradient-shift 10s ease infinite',
       },
-      borderRadius: {
-        'xl': '1rem',
-        '2xl': '1.5rem',
-        '3xl': '2rem',
+      textShadow: {
+        'default': '2px 2px 4px rgba(0, 0, 0, 0.5)',
+        'neon-pink': '0 0 5px #ff00ff, 0 0 10px #ff00ff',
+        'neon-green': '0 0 5px #39ff14, 0 0 10px #39ff14',
+        'electric-blue': '0 0 5px #00ffff, 0 0 10px #00ffff',
+      },
+      boxShadow: {
+        '3d': '5px 5px 0px 0px rgba(0,0,0,0.75)',
+        'inner-glow': 'inset 0 0 10px #fff, inset 0 0 20px #ff00ff',
+        'neon-outline-pink': '0 0 0 2px #fff, 0 0 0 4px #ff00ff',
+        'neon-outline-green': '0 0 0 2px #fff, 0 0 0 4px #39ff14',
+      },
+      fontSize: {
+        'fluid-sm': 'clamp(0.8rem, 1vw + 0.1rem, 1rem)',
+        'fluid-base': 'clamp(1rem, 1.5vw + 0.2rem, 1.25rem)',
+        'fluid-lg': 'clamp(1.25rem, 2vw + 0.3rem, 1.75rem)',
+        'fluid-xl': 'clamp(1.5rem, 2.5vw + 0.4rem, 2.25rem)',
+        'fluid-2xl': 'clamp(2rem, 4vw + 0.5rem, 3rem)',
+        'fluid-3xl': 'clamp(2.5rem, 6vw + 0.6rem, 4rem)',
+        'fluid-4xl': 'clamp(3rem, 8vw + 0.7rem, 5rem)',
+        'fluid-5xl': 'clamp(4rem, 10vw + 0.8rem, 7rem)',
       },
     },
   },
   plugins: [
-    require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
+    require('@tailwindcss/forms'),
+    function({ addUtilities, theme }) {
+      const newUtilities = {
+        '.text-shadow': {
+          textShadow: theme('textShadow.default'),
+        },
+        '.text-shadow-neon-pink': {
+          textShadow: theme('textShadow.neon-pink'),
+        },
+        '.text-shadow-neon-green': {
+          textShadow: theme('textShadow.neon-green'),
+        },
+        '.text-shadow-electric-blue': {
+          textShadow: theme('textShadow.electric-blue'),
+        },
+      }
+      addUtilities(newUtilities, ['responsive', 'hover'])
+    }
   ],
-}
+};

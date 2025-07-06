@@ -31,6 +31,9 @@ export class Payment {
   @Column({ nullable: true })
   transactionId: string;
 
+  @Column({ nullable: true })
+  refundId: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   @IsNumber()
   @Min(0)
@@ -41,6 +44,9 @@ export class Payment {
 
   @Column({ type: 'timestamp', nullable: true })
   refundedAt: Date;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, any>;
 
   @CreateDateColumn()
   createdAt: Date;

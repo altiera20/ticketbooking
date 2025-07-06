@@ -3,33 +3,15 @@
 import { Router } from 'express';
 import { BookingController } from '../controllers/booking.controller';
 import { validate } from '../middleware/validation.middleware';
-import { 
-  authenticate, 
-  requireEmailVerified 
-} from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
 const bookingController = new BookingController();
 
 // All booking routes require authentication
 router.use(authenticate);
-router.use(requireEmailVerified);
 
-// Get event seats
-router.get(
-  '/events/:id/seats',
-  validate(bookingController.getEventByIdSchema),
-  bookingController.getEventSeats
-);
-
-// Reserve seats temporarily
-router.post(
-  '/reserve-seats',
-  validate(bookingController.reserveSeatsSchema),
-  bookingController.reserveSeatsTemporarily
-);
-
-// Create a new booking
+// Create booking
 router.post(
   '/',
   validate(bookingController.createBookingSchema),
@@ -54,6 +36,13 @@ router.delete(
   '/:id',
   validate(bookingController.cancelBookingSchema),
   bookingController.cancelBooking
+);
+
+// Reserve seats temporarily
+router.post(
+  '/reserve-seats',
+  validate(bookingController.reserveSeatsSchema),
+  bookingController.reserveSeatsTemporarily
 );
 
 export default router;

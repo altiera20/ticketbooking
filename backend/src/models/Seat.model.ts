@@ -27,6 +27,9 @@ export class Seat {
   @IsString()
   section: string;
 
+  @Column('decimal', { precision: 10, scale: 2 })
+  price: number;
+
   @Column({ type: 'varchar', length: 20 })
   @IsEnum(['available', 'reserved', 'booked'])
   status: string;

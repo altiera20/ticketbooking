@@ -28,12 +28,13 @@ const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({ isOpen, onClose
     try {
       setIsDeleting(true);
       
-      await api.delete('/api/users/account');
+      await api.delete('/users/account');
       
       toast.success('Your account has been deleted');
       dispatch(logout());
       navigate('/');
     } catch (error) {
+      console.error('Account deletion error:', error);
       toast.error('Failed to delete account');
       setIsDeleting(false);
     }
@@ -95,6 +96,7 @@ const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({ isOpen, onClose
                   <div className="mt-2">
                     <Input
                       id="confirmDelete"
+                      name="confirmDelete"
                       value={confirmText}
                       onChange={(e) => setConfirmText(e.target.value)}
                       placeholder="DELETE"
@@ -111,12 +113,11 @@ const DeleteAccountModal: React.FC<DeleteAccountModalProps> = ({ isOpen, onClose
             <Button
               type="button"
               variant="danger"
-              leftIcon={<FaTrash />}
               onClick={handleDelete}
-              loading={isDeleting}
               disabled={isDeleting || confirmText !== 'DELETE'}
               className="sm:ml-3"
             >
+              <FaTrash className="mr-2" />
               Delete Account
             </Button>
             <Button

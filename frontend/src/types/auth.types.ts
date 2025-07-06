@@ -1,11 +1,14 @@
 export interface User {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   role: string;
   phone?: string;
   profilePicture?: string;
   walletBalance?: number;
+  isEmailVerified?: boolean;
+  isActive?: boolean;
 }
 
 export interface AuthState {
@@ -22,7 +25,8 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -30,12 +34,10 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  success: boolean;
-  data?: {
-    token: string;
-    user: User;
-  };
-  error?: string;
+  message: string;
+  accessToken: string;
+  refreshToken: string;
+  user: User;
 }
 
 export interface ForgotPasswordRequest {

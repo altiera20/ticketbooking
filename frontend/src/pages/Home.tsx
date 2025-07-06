@@ -1,97 +1,61 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Button from '../components/common/Button';
+
+const ActionButton: React.FC<{ to: string; children: React.ReactNode; primary?: boolean }> = ({ to, children, primary }) => (
+  <Link
+    to={to}
+    className={`font-heading text-fluid-lg px-8 py-4 rounded-lg shadow-3d font-bold border-2 border-light-text transform transition-transform duration-300 hover:scale-105 active:translate-y-1 active:shadow-none animate-pulse-glow ${primary ? 'bg-gradient-to-br from-neon-green to-electric-blue text-dark-text' : 'bg-transparent text-light-text'}`}>
+    {children}
+  </Link>
+);
+
+const HowItWorksCard: React.FC<{ number: string; title: string; description: string }> = ({ number, title, description }) => (
+  <div className="group relative p-8 bg-dark-bg/50 backdrop-blur-sm rounded-2xl border-2 border-electric-blue shadow-neon-outline-blue hover:shadow-neon-outline-green transition-shadow duration-300 transform hover:-translate-y-2">
+    <div className="absolute -top-8 -left-4 font-heading text-fluid-7xl text-vibrant-purple opacity-20 group-hover:opacity-50 transition-opacity duration-300">{number}</div>
+    <h3 className="font-heading text-fluid-2xl text-neon-green uppercase tracking-wider text-shadow-neon-green mb-4">{title}</h3>
+    <p className="font-body text-fluid-base text-light-text/80">{description}</p>
+    <div className="absolute inset-0 bg-gradient-to-br from-neon-pink to-vibrant-purple opacity-0 group-hover:opacity-10 transition-opacity duration-500 rounded-2xl"></div>
+  </div>
+);
 
 const Home: React.FC = () => {
   return (
-    <div className="flex flex-col items-center">
+    <div className="w-full">
       {/* Hero Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-gradient-to-br from-primary-50 to-primary-100 dark:from-dark-800 dark:to-dark-700">
-        <div className="container mx-auto px-4 md:px-6 text-center">
-          <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-gray-900 dark:text-white mb-6">
-            Book Tickets for Your Favorite Events
-          </h1>
-          <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
-            One platform for all your ticket needs - movies, concerts, and train journeys.
-            Find the best events, book with ease, and enjoy hassle-free experiences.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/events">
-              <Button variant="primary" size="lg">
-                Browse Events
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant="outline" size="lg">
-                Sign Up Now
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Events Section */}
-      <section className="w-full py-12 md:py-16">
-        <div className="container mx-auto px-4 md:px-6">
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">
-            Featured Events
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Placeholder for featured events */}
-            {[1, 2, 3].map((item) => (
-              <div 
-                key={item} 
-                className="bg-white dark:bg-dark-700 rounded-lg shadow-md p-4 h-64 flex items-center justify-center"
-              >
-                <p className="text-gray-500 dark:text-gray-400">Featured Event {item}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-10 text-center">
-            <Link to="/events">
-              <Button variant="secondary">
-                View All Events
-              </Button>
-            </Link>
-          </div>
+      <section className="w-full flex flex-col items-center justify-center text-center min-h-[80vh] p-8 bg-dark-bg bg-cover bg-center" style={{backgroundImage: 'radial-gradient(circle, #300030, #1a001a)'}}>
+        <h1 className="font-heading text-fluid-7xl text-light-text animate-glow leading-tight mb-6">
+          Your Portal to <span className="text-laser-lemon">Unforgettable</span> Events
+        </h1>
+        <p className="font-body text-fluid-xl text-light-text/80 max-w-4xl mx-auto mb-10">
+          Dive into a world of live music, thrilling movies, and seamless travel. Your next great experience is just a click away.
+        </p>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-6">
+          <ActionButton to="/events" primary>Explore Events</ActionButton>
+          <ActionButton to="/register">Join the Hype</ActionButton>
         </div>
       </section>
 
       {/* How It Works Section */}
-      <section className="w-full py-12 md:py-16 bg-light-100 dark:bg-dark-800">
-        <div className="container mx-auto px-4 md:px-6">
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">
-            How It Works
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-primary-600 dark:text-primary-400 text-2xl font-bold">1</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">Browse Events</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Explore our wide range of events and filter by type, date, or venue.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-primary-600 dark:text-primary-400 text-2xl font-bold">2</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">Book Tickets</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Select your preferred seats and securely complete your booking.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-primary-600 dark:text-primary-400 text-2xl font-bold">3</span>
-              </div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">Enjoy the Event</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Receive your e-tickets instantly and get ready for an amazing experience.
-              </p>
-            </div>
-          </div>
+      <section className="w-full py-20 md:py-32 px-8 bg-dark-bg">
+        <h2 className="font-heading text-fluid-5xl text-center text-light-text text-shadow-neon-pink mb-20">
+          How It Works
+        </h2>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
+          <HowItWorksCard 
+            number="01" 
+            title="Discover" 
+            description="Browse our vast selection of events. Use our hyper-intuitive filters to find exactly what you're looking for—or something unexpectedly amazing."
+          />
+          <HowItWorksCard 
+            number="02" 
+            title="Book" 
+            description="Secure your spot with our seamless, hyper-secure checkout process. Your tickets are beamed directly to your account in seconds."
+          />
+          <HowItWorksCard 
+            number="03" 
+            title="Experience" 
+            description="Flash your e-ticket at the gate and dive into the experience. All fun, no friction. Welcome to the future of ticketing."
+          />
         </div>
       </section>
     </div>

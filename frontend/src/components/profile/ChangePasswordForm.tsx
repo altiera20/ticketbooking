@@ -50,7 +50,7 @@ const ChangePasswordForm: React.FC = () => {
     try {
       setIsSubmitting(true);
       
-      await api.put('/api/users/password', {
+      await api.put('/users/password', {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });
@@ -58,6 +58,7 @@ const ChangePasswordForm: React.FC = () => {
       toast.success('Password changed successfully');
       reset(); // Reset form fields
     } catch (error: any) {
+      console.error('Password change error:', error);
       if (error.response?.status === 400) {
         toast.error(error.response.data.message || 'Current password is incorrect');
       } else {

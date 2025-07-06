@@ -25,31 +25,54 @@ class EmailService {
   private transporter: nodemailer.Transporter;
   private defaultFrom: string;
   private templatesDir: string;
+  private isUsingMockTransport: boolean = false;
 
   constructor() {
     this.defaultFrom = `"${config.email.fromName}" <${config.email.fromEmail}>`;
     this.templatesDir = path.join(__dirname, '../templates');
 
-    this.transporter = nodemailer.createTransport({
-      host: config.email.host,
-      port: config.email.port,
-      secure: config.email.secure,
-      auth: {
-        user: config.email.user,
-        pass: config.email.password,
-      },
-    });
+    // Check if we're using default credentials
+    const usingDefaultCredentials = 
+      config.email.user === 'your_email@gmail.com' || 
+      config.email.password === 'your_email_app_password';
 
-    // Verify connection
-    this.verifyConnection();
+    if (usingDefaultCredentials) {
+      // Use mock transporter for development
+      this.isUsingMockTransport = true;
+      this.transporter = nodemailer.createTransport({
+        jsonTransport: true
+      });
+      logger.info('Using mock email transport - emails will be logged but not sent');
+    } else {
+      // Use real transporter
+      this.transporter = nodemailer.createTransport({
+        host: config.email.host,
+        port: config.email.port,
+        secure: config.email.secure,
+        auth: {
+          user: config.email.user,
+          pass: config.email.password,
+        },
+      });
+      // Verify connection
+      this.verifyConnection();
+    }
   }
 
   private async verifyConnection(): Promise<void> {
     try {
-      await this.transporter.verify();
-      logger.info('Email service connected successfully');
+      if (!this.isUsingMockTransport) {
+        await this.transporter.verify();
+        logger.info('Email service connected successfully');
+      }
     } catch (error) {
       logger.error('Failed to connect to email service', error);
+      // Fallback to mock transport if verification fails
+      this.isUsingMockTransport = true;
+      this.transporter = nodemailer.createTransport({
+        jsonTransport: true
+      });
+      logger.info('Falling back to mock email transport - emails will be logged but not sent');
     }
   }
 
@@ -76,7 +99,14 @@ class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent: ${info.messageId}`);
+      
+      if (this.isUsingMockTransport) {
+        logger.info(`Mock email sent to ${options.to} with subject: ${options.subject}`);
+        logger.debug('Email content:', (info as any).message);
+      } else {
+        logger.info(`Email sent: ${info.messageId}`);
+      }
+      
       return true;
     } catch (error) {
       logger.error('Failed to send email', error);

@@ -61,10 +61,27 @@ class UploadService {
    */
   async processProfilePicture(filePath: string): Promise<string> {
     try {
+      logger.info(`Processing profile picture: ${filePath}`);
+      
+      // Check if the original file exists
+      if (!fs.existsSync(filePath)) {
+        logger.error(`Original file does not exist: ${filePath}`);
+        throw new Error('Original file not found');
+      }
+      
       const filename = path.basename(filePath);
       const outputPath = path.join(PROFILE_PICS_DIR, filename);
       
+      logger.info(`Output path for processed image: ${outputPath}`);
+      
+      // Ensure profile-pictures directory exists
+      if (!fs.existsSync(PROFILE_PICS_DIR)) {
+        logger.info(`Creating profile pictures directory: ${PROFILE_PICS_DIR}`);
+        fs.mkdirSync(PROFILE_PICS_DIR, { recursive: true });
+      }
+      
       // Process image with sharp
+      logger.info('Starting image processing with Sharp');
       await sharp(filePath)
         .resize(PROFILE_PIC_SIZE, PROFILE_PIC_SIZE, {
           fit: 'cover',
@@ -73,14 +90,24 @@ class UploadService {
         .jpeg({ quality: 80 })
         .toFile(outputPath);
       
+      logger.info('Image processing completed');
+      
       // Delete the original file
-      fs.unlinkSync(filePath);
+      logger.info(`Deleting original file: ${filePath}`);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
       
       // Return the relative path for storage in DB
-      return `uploads/profile-pictures/${filename}`;
+      const relativePath = `uploads/profile-pictures/${filename}`;
+      logger.info(`Returning relative path: ${relativePath}`);
+      return relativePath;
     } catch (error) {
       logger.error('Error processing profile picture:', error);
-      throw new Error('Failed to process profile picture');
+      if (error instanceof Error) {
+        throw new Error(`Failed to process profile picture: ${error.message}`);
+      }
+      throw new Error('Failed to process profile picture due to an unknown error');
     }
   }
 
@@ -90,7 +117,7 @@ class UploadService {
    */
   async deleteFile(filePath: string): Promise<void> {
     try {
-      const fullPath = path.join(__dirname, '../../', filePath);
+      const fullPath = path.resolve(UPLOAD_DIR, '..', filePath);
       
       // Check if file exists before attempting to delete
       if (fs.existsSync(fullPath)) {

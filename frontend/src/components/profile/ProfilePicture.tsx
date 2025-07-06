@@ -27,10 +27,11 @@ const ProfilePicture: React.FC<ProfilePictureProps> = ({
   
   // File upload hook
   const fileUpload = useFileUpload({
-    url: '/api/users/profile/picture',
+    url: '/users/profile/picture',
     maxSizeMB: 5,
     allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'],
     onSuccess: (response) => {
+      console.log('Profile picture upload success:', response);
       if (onUploadSuccess && response.user?.profilePicture) {
         onUploadSuccess(response.user.profilePicture);
       }
@@ -40,6 +41,7 @@ const ProfilePicture: React.FC<ProfilePictureProps> = ({
   // Dropzone setup
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
+      console.log('File dropped:', acceptedFiles[0].name);
       fileUpload.uploadFile(acceptedFiles[0]);
     }
   }, [fileUpload]);

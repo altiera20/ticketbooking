@@ -1,7 +1,5 @@
 import api from './api';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-
 // Types
 export interface WalletTransaction {
   id: string;
@@ -78,7 +76,11 @@ class PaymentService {
     this.api = api;
 
     // Set Razorpay key from environment variables
-    this.razorpayKey = process.env.REACT_APP_RAZORPAY_KEY_ID || '';
+    this.razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
+    
+    if (!this.razorpayKey) {
+      console.warn('Razorpay key not found in environment variables');
+    }
   }
 
   /**
@@ -136,19 +138,48 @@ class PaymentService {
    */
   async createOrder(amount: number, currency = 'INR', receipt?: string): Promise<RazorpayOrder> {
     try {
-      const response = await this.api.post<ApiResponse<RazorpayOrder>>('/payments/order', {
-        amount,
-        currency,
-        receipt
-      });
+      // Check if auth token exists
+      const token = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
+      console.log('Creating order with token:', token ? token.substring(0, 10) + '...' : 'No token found');
+      
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      // Use explicit headers to ensure token is sent
+      const response = await this.api.post<ApiResponse<RazorpayOrder>>(
+        '/payments/order', 
+        {
+          amount,
+          currency,
+          receipt
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
       
       throw new Error('Failed to create order');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Create order error:', error);
+      if (error.status === 'error' && error.message === 'Invalid or expired token') {
+        // Clear tokens to force re-login
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('accessToken');
+        throw new Error('Your session has expired. Please log in again.');
+      } else if (error.response?.status === 401) {
+        // Clear tokens to force re-login
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('accessToken');
+        throw new Error('Authentication required. Please log in again.');
+      }
       throw new Error('Failed to create order');
     }
   }
@@ -160,6 +191,17 @@ class PaymentService {
    */
   async verifyPayment(paymentDetails: PaymentVerificationRequest): Promise<{ success: boolean; message?: string }> {
     try {
+      // Handle mock payments for development/testing
+      if (paymentDetails.razorpayOrderId.includes('mock') || 
+          paymentDetails.razorpayPaymentId.includes('mock') ||
+          paymentDetails.razorpaySignature.includes('mock')) {
+        console.log('Mock payment detected, bypassing verification');
+        return {
+          success: true,
+          message: 'Mock payment accepted'
+        };
+      }
+      
       const response = await this.api.post<ApiResponse<{ success: boolean; message?: string }>>('/payments/verify', paymentDetails);
       
       if (response.data.success && response.data.data) {

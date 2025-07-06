@@ -1,4 +1,4 @@
-import { getRepository } from 'typeorm';
+import { AppDataSource } from '../config/database';
 import { User } from '../models/User.model';
 import logger from '../utils/logger.utils';
 import uploadService from './upload.service';
@@ -17,9 +17,7 @@ interface ChangePasswordData {
 }
 
 class UserService {
-  private get userRepository() {
-    return getRepository(User);
-  }
+  private userRepository = AppDataSource.getRepository(User);
 
   /**
    * Get user by ID
@@ -87,6 +85,9 @@ class UserService {
       return await this.userRepository.save(user);
     } catch (error) {
       logger.error('Error updating profile picture:', error);
+      if (error instanceof Error) {
+        throw new Error(error.message);
+      }
       throw new Error('Failed to update profile picture');
     }
   }

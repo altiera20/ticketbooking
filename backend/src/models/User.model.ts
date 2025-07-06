@@ -69,12 +69,29 @@ export class User {
   @BeforeUpdate()
   async hashPassword() {
     if (this.password) {
-      const salt = await bcrypt.genSalt(10);
-      this.password = await bcrypt.hash(this.password, salt);
+      console.log('Hashing password:', this.password.substring(0, 3) + '...');
+      try {
+        const salt = await bcrypt.genSalt(10);
+        console.log('Generated salt:', salt);
+        this.password = await bcrypt.hash(this.password, salt);
+        console.log('Password hashed successfully');
+      } catch (error) {
+        console.error('Error hashing password:', error);
+      }
     }
   }
 
   async comparePassword(candidatePassword: string): Promise<boolean> {
-    return bcrypt.compare(candidatePassword, this.password);
+    console.log('Comparing passwords:');
+    console.log('Candidate password:', candidatePassword);
+    console.log('Stored password hash:', this.password);
+    try {
+      const result = await bcrypt.compare(candidatePassword, this.password);
+      console.log('Comparison result:', result);
+      return result;
+    } catch (error) {
+      console.error('Password comparison error:', error);
+      return false;
+    }
   }
 }

@@ -4,8 +4,6 @@ import axios from 'axios';
 import api from './api';
 import { CreateBookingRequest, BookingResponse } from '../types/booking.types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-
 // Types
 export interface Seat {
   id: string;
@@ -57,61 +55,66 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export interface ReserveSeatRequest {
+  eventId: string;
+  seatIds: string[];
+}
+
 class BookingService {
-  private api = axios.create({
-    baseURL: API_BASE_URL,
-    timeout: 30000,
-  });
-
-  constructor() {
-    // Add auth token to requests
-    this.api.interceptors.request.use((config) => {
-      const token = localStorage.getItem('authToken');
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    });
-
-    // Handle auth errors
-    this.api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          localStorage.removeItem('authToken');
-          window.location.href = '/login';
-        }
-        return Promise.reject(error);
-      }
-    );
-  }
-
-  /**
-   * Get available seats for an event
-   */
-  async getEventSeats(eventId: string): Promise<Seat[]> {
-    try {
-      const response = await this.api.get<ApiResponse<Seat[]>>(`/events/${eventId}/seats`);
-      if (response.data.success && response.data.data) {
-        return response.data.data;
-      }
-      throw new Error(response.data.error || 'Failed to fetch seats');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.error || error.message || 'Failed to fetch seats');
-    }
-  }
-
   /**
    * Temporarily reserve seats
+   * @param eventIdOrRequest - Either the event ID or a ReserveSeatRequest object
+   * @param seatIds - Array of seat IDs (optional if eventIdOrRequest is a ReserveSeatRequest)
+   * @returns Reserved seats
    */
-  async reserveSeats(request: ReserveSeatRequest): Promise<Seat[]> {
+  async reserveSeats(eventIdOrRequest: string | ReserveSeatRequest, seatIds?: string[]): Promise<Seat[]> {
     try {
-      const response = await this.api.post<ApiResponse<Seat[]>>('/bookings/reserve-seats', request);
+      // Check if auth token exists
+      const token = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Authentication required to reserve seats');
+      }
+      
+      let request: ReserveSeatRequest;
+      
+      if (typeof eventIdOrRequest === 'string' && seatIds) {
+        // Called with eventId and seatIds
+        request = {
+          eventId: eventIdOrRequest,
+          seatIds: seatIds
+        };
+      } else if (typeof eventIdOrRequest === 'object') {
+        // Called with ReserveSeatRequest object
+        request = eventIdOrRequest;
+      } else {
+        throw new Error('Invalid arguments');
+      }
+      
+      console.log('Reserving seats with token:', token.substring(0, 10) + '...');
+      
+      // Use axios directly to ensure headers are set properly
+      const response = await api.post<{ success: boolean; data: Seat[] }>('/bookings/reserve-seats', request, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
-      throw new Error(response.data.error || 'Failed to reserve seats');
+      
+      throw new Error('Failed to reserve seats');
     } catch (error: any) {
+      console.error('Reserve seats error:', error);
+      if (error.response?.status === 401) {
+        // Handle authentication error
+        console.log('Authentication error when reserving seats');
+        // Force user to login again
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('accessToken');
+        throw new Error('Your session has expired. Please log in again.');
+      }
       throw new Error(error.response?.data?.error || error.message || 'Failed to reserve seats');
     }
   }
@@ -123,15 +126,39 @@ class BookingService {
    */
   async createBooking(bookingData: CreateBookingRequest): Promise<BookingResponse> {
     try {
+      // Check if auth token exists
+      const token = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      console.log('Creating booking with data:', JSON.stringify(bookingData, null, 2));
+      
       const response = await api.post<{ success: boolean; data: BookingResponse }>('/bookings', bookingData);
+      
+      console.log('Booking API response:', response.data);
       
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
       
       throw new Error('Failed to create booking');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Create booking error:', error);
+      
+      // Check for specific error responses
+      if (error.response) {
+        console.log('Error response status:', error.response.status);
+        console.log('Error response data:', error.response.data);
+        
+        if (error.response.status === 401) {
+          throw new Error('Authentication required. Please log in again.');
+        } else if (error.response.status === 400) {
+          const errorMessage = error.response.data?.error || 'Invalid booking request';
+          throw new Error(errorMessage);
+        }
+      }
+      
       throw new Error('Failed to create booking');
     }
   }
@@ -209,12 +236,20 @@ class BookingService {
    */
   async getWalletBalance(): Promise<number> {
     try {
-      const response = await this.api.get<ApiResponse<{ balance: number }>>('/users/wallet');
+      console.log('Requesting wallet balance from API');
+      const response = await api.get<ApiResponse<{ balance: number }>>('/users/wallet');
+      console.log('Wallet balance API response:', response.data);
+      
       if (response.data.success && response.data.data) {
-        return response.data.data.balance;
+        const balance = response.data.data.balance;
+        console.log('Retrieved wallet balance:', balance);
+        return balance;
       }
+      
+      console.error('Failed to get wallet balance:', response.data.error);
       throw new Error(response.data.error || 'Failed to fetch wallet balance');
     } catch (error: any) {
+      console.error('Wallet balance API error:', error);
       throw new Error(error.response?.data?.error || error.message || 'Failed to fetch wallet balance');
     }
   }
@@ -293,30 +328,6 @@ class BookingService {
     if (/^6/.test(cleaned)) return 'discover';
     
     return 'unknown';
-  }
-
-  /**
-   * Reserve seats temporarily
-   * @param eventId - Event ID
-   * @param seatIds - Array of seat IDs
-   * @returns Reserved seats
-   */
-  async reserveSeats(eventId: string, seatIds: string[]): Promise<any[]> {
-    try {
-      const response = await api.post<{ success: boolean; data: any[] }>('/bookings/reserve-seats', {
-        eventId,
-        seatIds
-      });
-      
-      if (response.data.success && response.data.data) {
-        return response.data.data;
-      }
-      
-      throw new Error('Failed to reserve seats');
-    } catch (error) {
-      console.error('Reserve seats error:', error);
-      throw new Error('Failed to reserve seats');
-    }
   }
 }
 

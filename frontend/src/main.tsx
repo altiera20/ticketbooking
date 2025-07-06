@@ -1,16 +1,22 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Provider } from 'react-redux'
-import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import App from './App.tsx'
+import App from './App'
 import { store } from './store'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+console.log('Main script executing...');
+
+// Check if the root element exists
+const rootElement = document.getElementById('root');
+console.log('Root element:', rootElement);
+
+if (rootElement) {
+  try {
+    ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <Provider store={store}>
-      <BrowserRouter>
         <App />
         <Toaster 
           position="top-right"
@@ -22,7 +28,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             },
           }}
         />
-      </BrowserRouter>
     </Provider>
   </React.StrictMode>,
-)
+    );
+    console.log('App rendered successfully');
+  } catch (error) {
+    console.error('Error rendering app:', error);
+  }
+} else {
+  console.error('Root element not found!');
+}

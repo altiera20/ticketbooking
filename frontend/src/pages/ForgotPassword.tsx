@@ -65,7 +65,6 @@ const ForgotPassword: React.FC = () => {
           <div>
             <Input
               id="email"
-              name="email"
               type="email"
               label="Email address"
               placeholder="you@example.com"

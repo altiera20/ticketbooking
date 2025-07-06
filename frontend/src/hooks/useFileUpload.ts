@@ -37,7 +37,7 @@ const useFileUpload = (options: FileUploadOptions): FileUploadReturn => {
   });
   
   const [currentFile, setCurrentFile] = useState<File | null>(null);
-  const [cancelTokenSource, setCancelTokenSource] = useState<any>(null);
+  const [cancelTokenSource, setCancelTokenSource] = useState<AbortController | null>(null);
   
   // Reset state
   const resetState = useCallback(() => {
@@ -107,22 +107,31 @@ const useFileUpload = (options: FileUploadOptions): FileUploadReturn => {
     formData.append('file', file);
     
     // Create cancel token
-    const source = axios.CancelToken.source();
-    setCancelTokenSource(source);
+    const controller = new AbortController();
+    setCancelTokenSource(controller);
     
     try {
+      console.log(`Uploading file to ${options.url}`, { 
+        fileSize: file.size, 
+        fileType: file.type,
+        fileName: file.name
+      });
+      
       const response = await api.post(options.url, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        onUploadProgress: (progressEvent) => {
+        onUploadProgress: (progressEvent: any) => {
           const percentCompleted = Math.round(
             (progressEvent.loaded * 100) / (progressEvent.total || 1)
           );
           setState(prev => ({ ...prev, progress: percentCompleted }));
+          console.log(`Upload progress: ${percentCompleted}%`);
         },
-        cancelToken: source.token,
+        signal: controller.signal,
       });
+      
+      console.log('Upload successful, server response:', response.data);
       
       setState(prev => ({ ...prev, isUploading: false, success: true }));
       
@@ -130,10 +139,28 @@ const useFileUpload = (options: FileUploadOptions): FileUploadReturn => {
         options.onSuccess(response.data);
       }
     } catch (error: any) {
+      console.error('Upload error:', error);
+      
       if (axios.isCancel(error)) {
         setState(prev => ({ ...prev, isUploading: false, error: 'Upload cancelled' }));
       } else {
-        const errorMessage = error.response?.data?.message || 'Failed to upload file';
+        let errorMessage = 'Failed to upload file';
+        
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.error('Server error response:', error.response.data);
+          errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        } else if (error.request) {
+          // The request was made but no response was received
+          console.error('No response received:', error.request);
+          errorMessage = 'No response from server';
+        } else {
+          // Something happened in setting up the request
+          console.error('Request setup error:', error.message);
+          errorMessage = error.message || 'Unknown error occurred';
+        }
+        
         setState(prev => ({ ...prev, isUploading: false, error: errorMessage }));
         
         if (options.onError) {
@@ -146,7 +173,7 @@ const useFileUpload = (options: FileUploadOptions): FileUploadReturn => {
   // Cancel upload
   const cancelUpload = useCallback(() => {
     if (cancelTokenSource) {
-      cancelTokenSource.cancel();
+      cancelTokenSource.abort();
       setCancelTokenSource(null);
     }
   }, [cancelTokenSource]);

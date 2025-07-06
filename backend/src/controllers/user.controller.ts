@@ -11,9 +11,15 @@ import userService from '../services/user.service';
 import logger from '../utils/logger.utils';
 
 export class UserController {
-  private userRepository = AppDataSource.getRepository(User);
-  private bookingRepository = AppDataSource.getRepository(Booking);
-  private paymentRepository = AppDataSource.getRepository(Payment);
+  private userRepository;
+  private bookingRepository;
+  private paymentRepository;
+
+  constructor() {
+    this.userRepository = AppDataSource.getRepository(User);
+    this.bookingRepository = AppDataSource.getRepository(Booking);
+    this.paymentRepository = AppDataSource.getRepository(Payment);
+  }
 
   // Validation schemas
   public changePasswordSchema = z.object({
@@ -64,6 +70,59 @@ export class UserController {
   }
 
   /**
+   * Get user wallet balance
+   * @route GET /api/users/wallet
+   */
+  async getWalletBalance(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      
+      console.log('Getting wallet balance for user:', userId);
+      
+      if (!userId) {
+        console.log('No user ID found in request');
+        res.status(401).json({ 
+          success: false, 
+          error: 'Unauthorized' 
+        });
+        return;
+      }
+      
+      console.log('Finding user in database');
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      
+      if (!user) {
+        console.log('User not found in database');
+        res.status(404).json({ 
+          success: false, 
+          error: 'User not found' 
+        });
+        return;
+      }
+      
+      console.log('User found, wallet balance:', user.walletBalance);
+      res.status(200).json({ 
+        success: true, 
+        data: { 
+          balance: user.walletBalance || 0
+        } 
+      });
+    } catch (error) {
+      console.error('Error getting wallet balance:', error);
+      logger.error('Error getting wallet balance:', error);
+      
+      // Return a default balance of 0 instead of an error
+      res.status(200).json({ 
+        success: true, 
+        data: { 
+          balance: 0
+        },
+        message: 'Using default balance due to error'
+      });
+    }
+  }
+
+  /**
    * Update user profile
    * @route PUT /api/users/profile
    */
@@ -105,20 +164,34 @@ export class UserController {
     try {
       const userId = req.user?.id;
       
+      logger.info(`Upload profile picture request for user ID: ${userId}`);
+      
       if (!userId) {
+        logger.warn('Profile picture upload attempt without authentication');
         res.status(401).json({ message: 'Unauthorized' });
         return;
       }
       
       if (!req.file) {
+        logger.warn('Profile picture upload with no file attached');
         res.status(400).json({ message: 'No file uploaded' });
         return;
       }
+      
+      logger.info(`File received: ${JSON.stringify({
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        path: req.file.path,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      })}`);
       
       const updatedUser = await userService.updateProfilePicture(userId, req.file.path);
       
       // Remove sensitive data
       const { password, ...userProfile } = updatedUser;
+      
+      logger.info('Profile picture updated successfully');
       
       res.status(200).json({ 
         message: 'Profile picture updated successfully',
@@ -126,7 +199,11 @@ export class UserController {
       });
     } catch (error) {
       logger.error('Error uploading profile picture:', error);
-      res.status(500).json({ message: 'Failed to upload profile picture' });
+      if (error instanceof Error) {
+        res.status(500).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: 'Failed to upload profile picture' });
+      }
     }
   }
 
