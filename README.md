@@ -6,13 +6,12 @@ A comprehensive ticket booking platform for movies, concerts, and train journeys
 
 - **User Authentication**: Secure login and registration system with role-based access (User, Vendor, Admin)
 - **Event Browsing**: Browse events with filtering by type, price, date, and venue
-- **Responsive Design**: Fully responsive UI that works on mobile, tablet, and desktop
-- **Dark/Light Mode**: Toggle between dark and light themes
+- **Responsive Design**: Fully responsive UI that works on desktop
 - **Vendor Dashboard**: Vendors can manage their events and track bookings
 - **Accessible UI**: Built with accessibility in mind, following WCAG guidelines
 - **State Management**: Centralized state management with Redux Toolkit and RTK Query
 - **Seat Selection and Booking**: Users can select seats and book events
-- **Payment Processing**: Integrated with Stripe for credit card payments and a wallet system
+- **Payment Processing**: Integrated with Razorpay for credit card payments and a wallet system
 - **Booking Management**: Users can manage their bookings
 - **User Profile Management**: Users can manage their profile information
 - **Admin Dashboard**: Admin can manage users, events, and bookings
@@ -21,7 +20,7 @@ A comprehensive ticket booking platform for movies, concerts, and train journeys
 
 The application supports two payment methods:
 
-1. **Credit Card Payments**: Integrated with Stripe for secure, PCI-compliant payment processing
+1. **Credit Card Payments**: Integrated with Razoray for secure, PCI-compliant payment processing
 2. **Wallet Payments**: Users can pre-fund their wallet and use it for quick bookings
 
 ### Wallet Features
